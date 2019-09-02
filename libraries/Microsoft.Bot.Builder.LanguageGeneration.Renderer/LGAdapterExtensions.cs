@@ -48,7 +48,7 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// <param name="botAdapter">botAdapter to add services to.</param>
         /// <param name="resourceExplorer">resourceExporer to provide to LanguageGenerator.</param>
         /// <param name="languageGenerator">LanguageGenerator to use.</param>
-        /// <param name="messageGenerator">(OPTIONAL) Default is TextMessageActivityGenerator(). </param>
+        /// <param name="messageGenerator">(OPTIONAL) Default is MessageActivityGenerator(). </param>
         /// <returns>botAdapter.</returns>
         public static BotAdapter UseLanguageGeneration(this BotAdapter botAdapter, ResourceExplorer resourceExplorer, ILanguageGenerator languageGenerator, IMessageActivityGenerator messageGenerator = null)
         {
@@ -63,11 +63,11 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// Register MessageActivityGeneration. 
         /// </summary>
         /// <param name="botAdapter">botAdapter to add services to.</param>
-        /// <param name="messageGenerator">(OPTIONAL) Default is TextMessageActivityGenerator(). </param>
+        /// <param name="messageGenerator">(OPTIONAL) Default is MessageActivityGenerator(). </param>
         /// <returns>botAdapter.</returns>
         public static BotAdapter UseMessageActivityGeneration(this BotAdapter botAdapter, IMessageActivityGenerator messageGenerator = null)
         {
-            botAdapter.Use(new RegisterClassMiddleware<IMessageActivityGenerator>(messageGenerator ?? new TextMessageActivityGenerator()));
+            botAdapter.Use(new RegisterClassMiddleware<IMessageActivityGenerator>(messageGenerator ?? new MessageActivityGenerator()));
             return botAdapter;
         }
 
