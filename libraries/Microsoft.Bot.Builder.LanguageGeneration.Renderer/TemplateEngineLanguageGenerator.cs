@@ -60,7 +60,7 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
         {
             try
             {
-                return await Task.FromResult(engine.Evaluate(template, data));
+                return await Task.FromResult(engine.Evaluate(template, data).ToString());
             }
             catch (Exception err)
             {

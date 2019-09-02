@@ -228,6 +228,12 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
                 return result;
             }
 
+            public override List<Diagnostic> VisitStructuredTemplateBody([NotNull] LGFileParser.StructuredTemplateBodyContext context)
+            {
+                // TODO
+                return new List<Diagnostic>();
+            }
+
             public override List<Diagnostic> VisitIfElseBody([NotNull] LGFileParser.IfElseBodyContext context)
             {
                 var result = new List<Diagnostic>();
