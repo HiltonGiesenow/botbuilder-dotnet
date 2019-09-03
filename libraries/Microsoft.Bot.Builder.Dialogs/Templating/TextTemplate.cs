@@ -8,10 +8,10 @@ namespace Microsoft.Bot.Builder.Dialogs
     /// Defines an text Template where the template expression is local aka "inline".
     /// </summary>
     [DebuggerDisplay("{Template}")]
-    public class ObjectTemplate : ITemplate<object>
+    public class TextTemplate : ITextTemplate
     {
         // Fixed text constructor for inline template
-        public ObjectTemplate(string template)
+        public TextTemplate(string template)
         {
             this.Template = template ?? throw new ArgumentNullException(nameof(template));
         }
@@ -24,7 +24,7 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// </value>
         public string Template { get; set; }
 
-        public async Task<object> BindToData(ITurnContext turnContext, object data)
+        public async Task<string> BindToData(ITurnContext turnContext, object data)
         {
             if (string.IsNullOrEmpty(this.Template))
             {
@@ -38,7 +38,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                     turnContext,
                     template: Template,
                     data: data).ConfigureAwait(false);
-                return result;
+                return result.ToString();
             }
 
             return null;
@@ -46,7 +46,7 @@ namespace Microsoft.Bot.Builder.Dialogs
 
         public override string ToString()
         {
-            return $"{nameof(ObjectTemplate)}({this.Template})";
+            return $"{nameof(TextTemplate)}({this.Template})";
         }
     }
 }

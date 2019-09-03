@@ -28,7 +28,7 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// <returns>message activity.</returns>
         public async Task<IMessageActivity> Generate(ITurnContext turnContext, string template, object data)
         {
-            object lgOriginResult = null;
+            object lgOriginResult = template;
             var languageGenerator = turnContext.TurnState.Get<ILanguageGenerator>();
             if (languageGenerator != null)
             {
@@ -75,58 +75,56 @@ namespace Microsoft.Bot.Builder.Dialogs
         private IMessageActivity CreateActivityFromText(IMessageActivity activity, string text)
         {
             activity.Text = text.Trim();
+            activity.Speak = text.Trim();
             return activity;
         }
 
         private IMessageActivity CreateActivityFromJObj(IMessageActivity activity, JObject lgJObj)
         {
-            foreach (var item in lgJObj)
+            var type = lgJObj["$type"].ToString().Trim(); // TODO check null
+
+            switch (type)
             {
-                var type = lgJObj["$type"].ToString(); // TODO check null
+                case "Herocard":
+                    AddGenericCardAtttachment(activity, HeroCard.ContentType, lgJObj);
+                    break;
 
-                switch (type)
-               {
-                    case "Herocard":
-                        AddGenericCardAtttachment(activity, HeroCard.ContentType, lgJObj);
-                        break;
+                case "ThumbnailCard":
+                    AddGenericCardAtttachment(activity, ThumbnailCard.ContentType, lgJObj);
+                    break;
 
-                    case "ThumbnailCard":
-                        AddGenericCardAtttachment(activity, ThumbnailCard.ContentType, lgJObj);
-                        break;
+                case "AudioCard":
+                    AddGenericCardAtttachment(activity, AudioCard.ContentType, lgJObj);
+                    break;
 
-                    case "AudioCard":
-                        AddGenericCardAtttachment(activity, AudioCard.ContentType, lgJObj);
-                        break;
+                case "VideoCard":
+                    AddGenericCardAtttachment(activity, VideoCard.ContentType, lgJObj);
+                    break;
 
-                    case "VideoCard":
-                        AddGenericCardAtttachment(activity, VideoCard.ContentType, lgJObj);
-                        break;
+                case "AnimationCard":
+                    AddGenericCardAtttachment(activity, AnimationCard.ContentType, lgJObj);
+                    break;
 
-                    case "AnimationCard":
-                        AddGenericCardAtttachment(activity, AnimationCard.ContentType, lgJObj);
-                        break;
+                case "SigninCard":
+                    AddGenericCardAtttachment(activity, SigninCard.ContentType, lgJObj);
+                    break;
 
-                    case "SigninCard":
-                        AddGenericCardAtttachment(activity, SigninCard.ContentType, lgJObj);
-                        break;
+                case "OAuthCard":
+                    AddGenericCardAtttachment(activity, OAuthCard.ContentType, lgJObj);
+                    break;
 
-                    case "OAuthCard":
-                        AddGenericCardAtttachment(activity, OAuthCard.ContentType, lgJObj);
-                        break;
+                case "AdaptiveCard":
+                    // json object
+                    AddJsonAttachment(activity, "application/vnd.microsoft.card.adaptive", lgJObj);
+                    break;
 
-                    case "AdaptiveCard":
-                        // json object
-                        AddJsonAttachment(activity, "application/vnd.microsoft.card.adaptive", lgJObj);
-                        break;
+                case "Activity":
+                    BuildNormalActivity(activity, lgJObj);
+                    break;
 
-                    case "Activity":
-                        BuildNormalActivity(activity, lgJObj);
-                        break;
-
-                    default:
-                        activity.Text = lgJObj.ToString();
-                        break;
-                }
+                default:
+                    activity.Text = lgJObj.ToString();
+                    break;
             }
 
             return activity;
@@ -199,7 +197,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                 return null;
             }
 
-            var type = jObj["$type"].ToString();
+            var type = jObj["$type"].ToString().Trim();
 
             switch (type)
             {

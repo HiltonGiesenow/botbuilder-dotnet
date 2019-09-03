@@ -187,7 +187,7 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
 
         public override object VisitNormalTemplateString([NotNull] LGFileParser.NormalTemplateStringContext context)
         {
-            var builder = new StringBuilder();
+            var result = new List<object>();
             foreach (ITerminalNode node in context.children)
             {
                 switch (node.Symbol.Type)
@@ -195,24 +195,29 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
                     case LGFileParser.DASH:
                         break;
                     case LGFileParser.ESCAPE_CHARACTER:
-                        builder.Append(Regex.Unescape(node.GetText()));
+                        result.Add(Regex.Unescape(node.GetText()));
                         break;
                     case LGFileParser.EXPRESSION:
-                        builder.Append(EvalExpression(node.GetText()).ToString());
+                        result.Add(EvalExpression(node.GetText()));
                         break;
                     case LGFileParser.TEMPLATE_REF:
-                        builder.Append(EvalTemplateRef(node.GetText()));
+                        result.Add(EvalTemplateRef(node.GetText()));
                         break;
                     case LGFileLexer.MULTI_LINE_TEXT:
-                        builder.Append(EvalMultiLineText(node.GetText()));
+                        result.Add(EvalMultiLineText(node.GetText()));
                         break;
                     default:
-                        builder.Append(node.GetText());
+                        result.Add(node.GetText());
                         break;
                 }
             }
 
-            return builder.ToString();
+            if (result.Count == 1 && !(result[0] is string) )
+            {
+                return result[0];
+            }
+
+            return string.Join(string.Empty, result);
         }
 
         public object ConstructScope(string templateName, List<object> args)
@@ -284,7 +289,7 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
             return result;
         }
 
-        private string EvalTemplateRef(string exp)
+        private object EvalTemplateRef(string exp)
         {
             exp = exp.TrimStart('[').TrimEnd(']').Trim();
             if (exp.IndexOf('(') < 0)
@@ -299,7 +304,7 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
                 }
             }
 
-            return EvalExpression(exp).ToString();
+            return EvalExpression(exp);
         }
 
         private EvaluationTarget CurrentTarget() =>
