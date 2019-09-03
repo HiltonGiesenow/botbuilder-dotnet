@@ -737,6 +737,11 @@ namespace Microsoft.Bot.Builder.AI.LanguageGeneration.Tests
                 "{\n  \"$type\": \"Activity\",\n  \"speak\": \"I can also speak!\"\n} {\n  \"$type\": \"MyStruct\",\n  \"text\": \"hi\"\n}"
             };
             Assert.IsTrue(options.Contains(evaled.ToString()));
+
+            evaled = engine.EvaluateTemplate("StructuredTemplateRef");
+
+            Assert.IsTrue(
+                JToken.DeepEquals(JObject.Parse("{\"$type\":\"MyStruct\",\"text\":\"hi\"}"), evaled as JObject));
         }
     }
 }

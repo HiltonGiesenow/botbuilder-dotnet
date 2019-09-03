@@ -57,7 +57,13 @@
 # MultiExpression
 - @{T3()} @{T4()}
 
+# StructuredTemplateRef
+- [T4]
+
 # T4
 [MyStruct
     Text = hi
 ]
+
+
+

@@ -284,11 +284,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                             }
 
                             var imageList = GetStringListValues(value);
-                            var images = new JArray();
-
-                            imageList.ForEach(u => images.Add(new JObject() { { "url", u } }));
-
-                            card["images"] = images;
+                            imageList.ForEach(u => ((JArray)card["images"]).Add(new JObject() { { "url", u } }));
                         }
                         else
                         {
@@ -306,11 +302,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                         }
 
                         var mediaList = GetStringListValues(value);
-                        var medias = new JArray();
-
-                        mediaList.ForEach(u => medias.Add(new JObject() { { "url", u } }));
-
-                        card[property] = medias;
+                        mediaList.ForEach(u => ((JArray)card[property]).Add(new JObject() { { "url", u } }));
                         break;
 
                     case "buttons":
@@ -320,11 +312,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                         }
 
                         var buttonList = GetStringListValues(value);
-                        var buttons = new JArray();
-
-                        buttonList.ForEach(u => buttons.Add(new JObject() { { "title", u.Trim() }, { "type", "imBack" }, { "value", u.Trim() } }));
-
-                        card[property] = buttons;
+                        buttonList.ForEach(u => ((JArray)card[property]).Add(new JObject() { { "title", u.Trim() }, { "type", "imBack" }, { "value", u.Trim() } }));
 
                         break;
 
