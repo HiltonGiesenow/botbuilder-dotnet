@@ -13,6 +13,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+using AdaptiveCards;
 using Microsoft.Recognizers.Text.DataTypes.TimexExpression;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -3288,6 +3289,9 @@ namespace Microsoft.Bot.Builder.Expressions
                     }),
                     ReturnType.Object,
                     ValidateUnary),
+
+                // Adaptivecard function
+                new ExpressionEvaluator(ExpressionType.AdaptiveCard, Apply(args => AdaptiveCard.FromJson(args[0])?.Card), ReturnType.Object, ValidateUnaryString),
             };
 
             var lookup = new Dictionary<string, ExpressionEvaluator>();

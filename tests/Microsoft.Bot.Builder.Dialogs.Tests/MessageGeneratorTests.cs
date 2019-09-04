@@ -96,21 +96,21 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
             }
         }
 
-        //[TestMethod]
-        //public async Task TestAdaptiveCard()
-        //{
-        //    var context = await GetTurnContext("AdaptiveCardActivity.lg");
-        //    var mg = new MessageActivityGenerator();
-        //    dynamic data = new JObject();
-        //    data.adaptiveCardTitle = "test";
-        //    IMessageActivity activity = await mg.Generate(context, "[adaptiveCardTemplate]", data: data);
-        //    Assert.AreEqual(ActivityTypes.Message, activity.Type);
-        //    Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
-        //    Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
-        //    Assert.AreEqual(1, activity.Attachments.Count);
-        //    Assert.AreEqual("application/vnd.microsoft.card.adaptive", activity.Attachments[0].ContentType);
-        //    Assert.AreEqual("test", (string)((dynamic)activity.Attachments[0].Content).body[0].text);
-        //}
+        [TestMethod]
+        public async Task TestAdaptiveCard()
+        {
+            var context = await GetTurnContext("AdaptiveCardActivity.lg");
+            var mg = new MessageActivityGenerator();
+            dynamic data = new JObject();
+            data.adaptiveCardTitle = "test";
+            IMessageActivity activity = await mg.Generate(context, "[prompt]", data: data);
+            Assert.AreEqual(ActivityTypes.Message, activity.Type);
+            Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
+            Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
+            Assert.AreEqual(1, activity.Attachments.Count);
+            Assert.AreEqual("application/vnd.microsoft.card.adaptive", activity.Attachments[0].ContentType);
+            Assert.AreEqual("test", (string)((dynamic)activity.Attachments[0].Content).body[0].text);
+        }
 
         private static string GetProjectFolder()
         {

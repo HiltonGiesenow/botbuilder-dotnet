@@ -59,17 +59,12 @@ namespace Microsoft.Bot.Builder.Dialogs
         {
             var activity = Activity.CreateMessageActivity();
             activity.TextFormat = TextFormatTypes.Markdown;
-            if (lgOutput is string lgText)
+            if (lgOutput is JObject lgJObj)
             {
-                return CreateActivityFromText(activity, lgText);
+                return CreateActivityFromJObj(activity, lgJObj);
             }
 
-            if (!(lgOutput is JObject lgJObj))
-            {
-                return activity;
-            }
-
-            return CreateActivityFromJObj(activity, lgJObj);
+            return CreateActivityFromText(activity, lgOutput.ToString());
         }
 
         private IMessageActivity CreateActivityFromText(IMessageActivity activity, string text)
@@ -81,7 +76,7 @@ namespace Microsoft.Bot.Builder.Dialogs
 
         private IMessageActivity CreateActivityFromJObj(IMessageActivity activity, JObject lgJObj)
         {
-            var type = lgJObj["$type"].ToString().Trim(); // TODO check null
+            var type = GetTemplateType(lgJObj);
 
             switch (type)
             {
@@ -173,6 +168,23 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
         }
 
+        private string GetTemplateType(JObject jObj)
+        {
+            if (jObj == null)
+            {
+                return string.Empty;
+            }
+
+            var type = jObj["$type"]?.ToString()?.Trim();
+            if (string.IsNullOrEmpty(type))
+            {
+                // Adaptive card type
+                type = jObj["type"]?.ToString()?.Trim();
+            }
+
+            return type ?? string.Empty;
+        }
+
         private List<Attachment> GetAttachments(JToken value)
         {
             var attachments = new List<Attachment>();
@@ -197,7 +209,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                 return null;
             }
 
-            var type = jObj["$type"].ToString().Trim();
+            var type = GetTemplateType(jObj);
 
             switch (type)
             {
