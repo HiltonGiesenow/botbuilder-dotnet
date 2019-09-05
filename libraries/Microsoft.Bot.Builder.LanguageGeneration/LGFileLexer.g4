@@ -179,6 +179,10 @@ TEXT
 
 mode STRUCTURED_TEMPLATE_BODY_MODE;
 
+STRUCTURED_COMMENTS
+  : ('>'|'$') ~[\r\n]* '\r'?'\n' -> skip
+  ;
+
 STRUCTURED_NEWLINE
   : '\r'? '\n'
   ;
