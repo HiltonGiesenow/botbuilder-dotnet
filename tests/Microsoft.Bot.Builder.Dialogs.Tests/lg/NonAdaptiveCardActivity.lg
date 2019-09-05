@@ -1,5 +1,5 @@
 ﻿# HeroCardTemplate
-[Herocard 
+[HeroCard 
         title=Cheese gromit!
         subtitle=@{type}
         text=This is some text describing the card, it's cool because it's cool
@@ -19,7 +19,7 @@
 ]
 
 # AnimationCardTemplate
-[Animationcard
+[AnimationCard
         Title=Animation Card
         Subtitle=look at it animate 
         autostart=true
@@ -28,4 +28,18 @@
         Image=https://docs.microsoft.com/en-us/bot-framework/media/how-it-works/architecture-resize.png
         Image=https://docs.microsoft.com/en-us/bot-framework/media/how-it-works/architecture-resize.png
         Media=http://oi42.tinypic.com/1rchlx.jpg
+]
+
+# HerocardWithCardAction
+[HeroCard
+    Title = @{title}
+    Text = @{text}
+    Buttons = {cardActionTemplate(null, title, text)}
+]
+
+# cardActionTemplate(type, title, value)
+[CardAction
+    Type = {if(type == null, 'imBack', type)}
+    Title = {title}
+    Value = {value}
 ]

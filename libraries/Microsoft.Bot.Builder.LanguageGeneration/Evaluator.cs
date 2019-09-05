@@ -105,14 +105,18 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
                     // {ST2()}
                     // ]
 
-                    // TODO: just merge the first layer.
                     // When the same property exists in both the calling template as well as callee, the content in caller will trump any content in the callee.
                     var propertyObject = JObject.FromObject(EvalExpression(line));
-                    foreach (var item in propertyObject)
+
+                    // Full reference to another structured template is limited to the structured template with same type 
+                    if (propertyObject["$type"] != null && propertyObject["$type"].ToString() == typeName)
                     {
-                        if (result.Property(item.Key) == null)
+                        foreach (var item in propertyObject)
                         {
-                            result[item.Key] = item.Value;
+                            if (result.Property(item.Key) == null)
+                            {
+                                result[item.Key] = item.Value;
+                            }
                         }
                     }
                 }

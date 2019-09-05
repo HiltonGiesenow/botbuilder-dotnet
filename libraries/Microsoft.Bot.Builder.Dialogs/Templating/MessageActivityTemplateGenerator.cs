@@ -1,7 +1,10 @@
 ﻿using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.InteropServices.ComTypes;
 using System.Threading.Tasks;
+using System.Xml;
+using Microsoft.Bot.Connector;
 using Microsoft.Bot.Schema;
 using Newtonsoft.Json.Linq;
 
@@ -41,85 +44,59 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
 
             // render activity from template
-            return await CreateActivity(lgOriginResult, data, turnContext, languageGenerator).ConfigureAwait(false);
+            return await CreateActivity(lgOriginResult).ConfigureAwait(false);
         }
 
         /// <summary>
         /// Given a lg result, create an activity.
         /// </summary>
         /// <remarks>
-        /// This method will create an MessageActivity from text ot JToken
+        /// This method will create an MessageActivity from text ot JToken.
         /// </remarks>
         /// <param name="lgOutput">lg output.</param>
-        /// <param name="data">data to bind to.</param>
-        /// <param name="turnContext">turnContext.</param>
-        /// <param name="languageGenerator">languageGenerator.</param>
         /// <returns>MessageActivity for it.</returns>
-        public async Task<IMessageActivity> CreateActivity(object lgOutput, object data, ITurnContext turnContext, ILanguageGenerator languageGenerator)
+        public async Task<IMessageActivity> CreateActivity(object lgOutput)
         {
             var activity = Activity.CreateMessageActivity();
             activity.TextFormat = TextFormatTypes.Markdown;
             if (lgOutput is JObject lgJObj)
             {
-                return CreateActivityFromJObj(activity, lgJObj);
+                return CreateActivityFromJObj(lgJObj);
             }
 
-            return CreateActivityFromText(activity, lgOutput.ToString());
+            return CreateActivityFromText(lgOutput.ToString());
         }
 
-        private IMessageActivity CreateActivityFromText(IMessageActivity activity, string text)
+        private IMessageActivity CreateActivityFromText(string text)
         {
+            var activity = Activity.CreateMessageActivity();
             activity.Text = text.Trim();
             activity.Speak = text.Trim();
+
             return activity;
         }
 
-        private IMessageActivity CreateActivityFromJObj(IMessageActivity activity, JObject lgJObj)
+        private IMessageActivity CreateActivityFromJObj(JObject lgJObj)
         {
-            var type = GetTemplateType(lgJObj);
+            var activity = Activity.CreateMessageActivity();
+            activity.TextFormat = TextFormatTypes.Markdown;
 
-            switch (type)
+            if (GetAttachment(lgJObj, out var attachment))
             {
-                case "Herocard":
-                    AddGenericCardAtttachment(activity, HeroCard.ContentType, lgJObj);
-                    break;
+                activity.Attachments.Add(attachment);
+            }
+            else
+            {
+                var type = GetStructureType(lgJObj);
 
-                case "ThumbnailCard":
-                    AddGenericCardAtttachment(activity, ThumbnailCard.ContentType, lgJObj);
-                    break;
-
-                case "AudioCard":
-                    AddGenericCardAtttachment(activity, AudioCard.ContentType, lgJObj);
-                    break;
-
-                case "VideoCard":
-                    AddGenericCardAtttachment(activity, VideoCard.ContentType, lgJObj);
-                    break;
-
-                case "AnimationCard":
-                    AddGenericCardAtttachment(activity, AnimationCard.ContentType, lgJObj);
-                    break;
-
-                case "SigninCard":
-                    AddGenericCardAtttachment(activity, SigninCard.ContentType, lgJObj);
-                    break;
-
-                case "OAuthCard":
-                    AddGenericCardAtttachment(activity, OAuthCard.ContentType, lgJObj);
-                    break;
-
-                case "AdaptiveCard":
-                    // json object
-                    AddJsonAttachment(activity, "application/vnd.microsoft.card.adaptive", lgJObj);
-                    break;
-
-                case "Activity":
+                if (type == nameof(Activity))
+                {
                     BuildNormalActivity(activity, lgJObj);
-                    break;
-
-                default:
-                    activity.Text = lgJObj.ToString();
-                    break;
+                }
+                else
+                {
+                    activity = CreateActivityFromText(lgJObj.ToString());
+                }
             }
 
             return activity;
@@ -150,13 +127,10 @@ namespace Microsoft.Bot.Builder.Dialogs
                         activity.Attachments = GetAttachments(value);
                         break;
 
-                    case "suggestedActions":
-                        var suggestions = GetStringListValues(value);
-                        activity.SuggestedActions = new SuggestedActions
-                        {
-                            Actions = suggestions.Select(s => new CardAction(type: ActionTypes.MessageBack, title: s, displayText: s, text: s)).ToList()
-                        };
+                    case "suggestedactions":
+                        activity.SuggestedActions = GetSuggestions(value);
                         break;
+
                     case "attachmentlayout":
                         activity.AttachmentLayout = value.ToString();
                         break;
@@ -168,7 +142,117 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
         }
 
-        private string GetTemplateType(JObject jObj)
+        private SuggestedActions GetSuggestions(JToken value)
+        {
+            var suggestions = new SuggestedActions();
+            var actions = new List<JToken>();
+            if (value is JArray array)
+            {
+                actions = array.ToList();
+            }
+            else
+            {
+                actions.Add(value);
+            }
+
+            foreach (var action in actions)
+            {
+                if (action is JValue jValue && jValue.Type == JTokenType.String)
+                {
+                    var actionStr = jValue.ToObject<string>().Trim();
+                    suggestions.Actions.Add(new CardAction(type: ActionTypes.MessageBack, title: actionStr, displayText: actionStr, text: actionStr));
+                }
+                else if (action is JObject actionJObj && GetCardAction(actionJObj, out var cardAction))
+                {
+                    suggestions.Actions.Add(cardAction);
+                }
+            }
+
+            return suggestions;
+        }
+
+        private List<CardAction> GetButtons(JToken value)
+        {
+            var buttons = new List<CardAction>();
+            var actions = new List<JToken>();
+            if (value is JArray array)
+            {
+                actions = array.ToList();
+            }
+            else
+            {
+                actions.Add(value);
+            }
+
+            foreach (var action in actions)
+            {
+                if (action is JValue jValue && jValue.Type == JTokenType.String)
+                {
+                    var actionStr = jValue.ToObject<string>().Trim();
+                    buttons.Add(new CardAction(type: ActionTypes.ImBack, title: actionStr, value: actionStr));
+                }
+                else if (action is JObject actionJObj && GetCardAction(actionJObj, out var cardAction))
+                {
+                    buttons.Add(cardAction);
+                }
+            }
+
+            return buttons;
+        }
+
+        private bool GetCardAction(JObject cardActionJObj, out CardAction cardAction)
+        {
+            var type = GetStructureType(cardActionJObj);
+            cardAction = new CardAction();
+            var isCardAction = true;
+            if (type == nameof(CardAction))
+            {
+                foreach (var item in cardActionJObj)
+                {
+                    var property = item.Key.Trim().ToLower();
+                    var value = item.Value;
+
+                    switch (property.ToLower())
+                    {
+                        case "type":
+                            cardAction.Type = value.ToString();
+                            break;
+
+                        case "title":
+                            cardAction.Title = value.ToString();
+                            break;
+
+                        case "value":
+                            cardAction.Value = value.ToString();
+                            break;
+
+                        case "displaytext":
+                            cardAction.DisplayText = value.ToString();
+                            break;
+
+                        case "text":
+                            cardAction.Text = value.ToString();
+                            break;
+
+                        case "image":
+                            cardAction.Image = value.ToString();
+                            break;
+
+                        default:
+                            Debug.WriteLine(string.Format("Skipping unknown activity property {0}", property));
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                isCardAction = false;
+            }
+
+            return isCardAction;
+        }
+
+        private string GetStructureType(JObject jObj)
         {
             if (jObj == null)
             {
@@ -188,83 +272,85 @@ namespace Microsoft.Bot.Builder.Dialogs
         private List<Attachment> GetAttachments(JToken value)
         {
             var attachments = new List<Attachment>();
+            var attachmentsJsonList = new List<JObject>();
             if (value is JArray array)
             {
-                attachments = array.Select(u => ConvertToAttachment(u)).Where(u => u != null).ToList();
+                attachmentsJsonList = array.Select(u => (JObject)u).ToList();
             }
             else
             {
-                attachments.Add(ConvertToAttachment(value));
+                attachmentsJsonList.Add((JObject)value);
+            }
+
+            foreach (var attachmentsJson in attachmentsJsonList)
+            {
+                if (GetAttachment(attachmentsJson, out var attachment))
+                {
+                    attachments.Add(attachment);
+                }
             }
 
             return attachments;
         }
 
-        private Attachment ConvertToAttachment(JToken attachmentJObj)
+        private bool GetAttachment(JObject lgJObj, out Attachment attachment)
         {
-            var attachment = new Attachment();
+            attachment = new Attachment();
+            var isAttachment = true;
 
-            if (!(attachmentJObj is JObject jObj))
-            {
-                return null;
-            }
-
-            var type = GetTemplateType(jObj);
+            var type = GetStructureType(lgJObj);
 
             switch (type)
             {
-                case "Herocard":
-                    attachment.ContentType = HeroCard.ContentType;
+                case nameof(HeroCard):
+                    attachment = GetCardAtttachment(HeroCard.ContentType, lgJObj);
                     break;
 
-                case "ReceiptCard":
-                    attachment.ContentType = ReceiptCard.ContentType;
+                case nameof(ThumbnailCard):
+                    attachment = GetCardAtttachment(ThumbnailCard.ContentType, lgJObj);
                     break;
 
-                case "ThumbnailCard":
-                    attachment.ContentType = ThumbnailCard.ContentType;
+                case nameof(AudioCard):
+                    attachment = GetCardAtttachment(AudioCard.ContentType, lgJObj);
                     break;
 
-                case "AudioCard":
-                    attachment.ContentType = AudioCard.ContentType;
+                case nameof(VideoCard):
+                    attachment = GetCardAtttachment(VideoCard.ContentType, lgJObj);
                     break;
 
-                case "VideoCard":
-                    attachment.ContentType = VideoCard.ContentType;
+                case nameof(AnimationCard):
+                    attachment = GetCardAtttachment(AnimationCard.ContentType, lgJObj);
                     break;
 
-                case "AnimationCard":
-                    attachment.ContentType = AnimationCard.ContentType;
+                case nameof(SigninCard):
+                    attachment = GetCardAtttachment(SigninCard.ContentType, lgJObj);
                     break;
 
-                case "SigninCard":
-                    attachment.ContentType = SigninCard.ContentType;
+                case nameof(OAuthCard):
+                    attachment = GetCardAtttachment(OAuthCard.ContentType, lgJObj);
+                    break;
+
+                case nameof(ReceiptCard):
+                    attachment = GetCardAtttachment(ReceiptCard.ContentType, lgJObj);
                     break;
 
                 case "AdaptiveCard":
-                    attachment.ContentType = "application/vnd.microsoft.card.adaptive";
+                    attachment = new Attachment("application/vnd.microsoft.card.adaptive", content: lgJObj);
                     break;
 
                 default:
-                    attachment.ContentType = type;
+                    isAttachment = false;
                     break;
             }
 
-            attachment.Content = jObj;
-            return attachment;
+            return isAttachment;
         }
 
-        private void AddJsonAttachment(IMessageActivity activity, string type, JObject lgJObj)
-        {
-            var attachment = new Attachment(type, content: lgJObj);
-            activity.Attachments.Add(attachment);
-        }
-
-        private void AddGenericCardAtttachment(IMessageActivity activity, string type, JObject lgJObj)
+        private Attachment GetCardAtttachment(string type, JObject lgJObj)
         {
             var attachment = new Attachment(type, content: new JObject());
             BuildGenericCard(attachment.Content, type, lgJObj);
-            activity.Attachments.Add(attachment);
+            return attachment;
         }
 
         private void BuildGenericCard(dynamic card, string type, JObject lgJObj)
@@ -314,18 +400,12 @@ namespace Microsoft.Bot.Builder.Dialogs
                         }
 
                         var mediaList = GetStringListValues(value);
+                        
                         mediaList.ForEach(u => ((JArray)card[property]).Add(new JObject() { { "url", u } }));
                         break;
 
                     case "buttons":
-                        if (card[property] == null)
-                        {
-                            card[property] = new JArray();
-                        }
-
-                        var buttonList = GetStringListValues(value);
-                        buttonList.ForEach(u => ((JArray)card[property]).Add(new JObject() { { "title", u.Trim() }, { "type", "imBack" }, { "value", u.Trim() } }));
-
+                        card[property] = JArray.FromObject(GetButtons(value));
                         break;
 
                     case "autostart":

@@ -97,6 +97,30 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
         }
 
         [TestMethod]
+        public async Task TestCardAction()
+        {
+            var context = await GetTurnContext("NonAdaptiveCardActivity.lg");
+            var mg = new MessageActivityGenerator();
+            dynamic data = new JObject();
+            data.title = "titleContent";
+            data.text = "textContent";
+            IMessageActivity activity = await mg.Generate(context, "[HerocardWithCardAction]", data: data);
+            Assert.AreEqual(ActivityTypes.Message, activity.Type);
+            Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
+            Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
+            Assert.AreEqual(1, activity.Attachments.Count);
+            Assert.AreEqual(HeroCard.ContentType, activity.Attachments[0].ContentType);
+            var card = ((JObject)activity.Attachments[0].Content).ToObject<HeroCard>();
+            Assert.IsNotNull(card, "should have herocard");
+            Assert.AreEqual("titleContent", card.Title, "card title should be set");
+            Assert.AreEqual("textContent", card.Text, "card text should be set");
+            Assert.AreEqual(1, card.Buttons.Count, "card buttons should be set");
+            Assert.AreEqual($"imBack", card.Buttons[0].Type, "card buttons should be set");
+            Assert.AreEqual($"titleContent", card.Buttons[0].Title, "card buttons should be set");
+            Assert.AreEqual($"textContent", card.Buttons[0].Value, "card buttons should be set");
+        }
+
+        [TestMethod]
         public async Task TestAdaptiveCard()
         {
             var context = await GetTurnContext("AdaptiveCardActivity.lg");
