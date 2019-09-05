@@ -232,16 +232,25 @@ namespace Microsoft.Bot.Builder.LanguageGeneration
             {
                 var result = new List<Diagnostic>();
 
-                var bodys = context.structuredBodyContentLine().STRUCTURED_CONTENT();
-                foreach (var body in bodys)
+                var bodys = context.structuredBodyContentLine()?.STRUCTURED_CONTENT();
+                if (bodys == null || bodys.Length == 0 || bodys.All(u => string.IsNullOrEmpty(u.GetText())))
                 {
-                    var line = body.GetText().Trim();
-                    var start = line.IndexOf('=');
-                    if (start < 0 && !IsPureExpression(line))
+                    result.Add(BuildLGDiagnostic($"Structured content is empty", context: context.structuredBodyContentLine()));
+                }
+                else
+                {
+                    foreach (var body in bodys)
                     {
-                        result.Add(BuildLGDiagnostic($"Structured Content does not support", context: context.structuredBodyContentLine()));
+                        var line = body.GetText().Trim();
+                        var start = line.IndexOf('=');
+                        if (start < 0 && !IsPureExpression(line))
+                        {
+                            result.Add(BuildLGDiagnostic($"Structured content does not support", context: context.structuredBodyContentLine()));
+                        }
                     }
                 }
+
+                
                 return result;
             }
 
