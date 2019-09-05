@@ -144,16 +144,12 @@ namespace Microsoft.Bot.Builder.Dialogs
 
         private SuggestedActions GetSuggestions(JToken value)
         {
-            var suggestions = new SuggestedActions();
-            var actions = new List<JToken>();
-            if (value is JArray array)
+            var suggestions = new SuggestedActions()
             {
-                actions = array.ToList();
-            }
-            else
-            {
-                actions.Add(value);
-            }
+                Actions = new List<CardAction>()
+            };
+
+            var actions = FlattenValue(value);
 
             foreach (var action in actions)
             {
@@ -174,15 +170,7 @@ namespace Microsoft.Bot.Builder.Dialogs
         private List<CardAction> GetButtons(JToken value)
         {
             var buttons = new List<CardAction>();
-            var actions = new List<JToken>();
-            if (value is JArray array)
-            {
-                actions = array.ToList();
-            }
-            else
-            {
-                actions.Add(value);
-            }
+            var actions = FlattenValue(value);
 
             foreach (var action in actions)
             {
@@ -272,19 +260,11 @@ namespace Microsoft.Bot.Builder.Dialogs
         private List<Attachment> GetAttachments(JToken value)
         {
             var attachments = new List<Attachment>();
-            var attachmentsJsonList = new List<JObject>();
-            if (value is JArray array)
-            {
-                attachmentsJsonList = array.Select(u => (JObject)u).ToList();
-            }
-            else
-            {
-                attachmentsJsonList.Add((JObject)value);
-            }
+            var attachmentsJsonList = FlattenValue(value);
 
             foreach (var attachmentsJson in attachmentsJsonList)
             {
-                if (GetAttachment(attachmentsJson, out var attachment))
+                if (GetAttachment((JObject)attachmentsJson, out var attachment))
                 {
                     attachments.Add(attachment);
                 }
@@ -381,7 +361,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                                 card["images"] = new JArray();
                             }
 
-                            var imageList = GetStringListValues(value);
+                            var imageList = FlattenValue(value).Select(u => u.ToString()).ToList();
                             imageList.ForEach(u => ((JArray)card["images"]).Add(new JObject() { { "url", u } }));
                         }
                         else
@@ -399,8 +379,8 @@ namespace Microsoft.Bot.Builder.Dialogs
                             card[property] = new JArray();
                         }
 
-                        var mediaList = GetStringListValues(value);
-                        
+                        var mediaList = FlattenValue(value).Select(u => u.ToString()).ToList();
+
                         mediaList.ForEach(u => ((JArray)card[property]).Add(new JObject() { { "url", u } }));
                         break;
 
@@ -422,16 +402,16 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
         }
 
-        private List<string> GetStringListValues(JToken item)
+        private List<JToken> FlattenValue(JToken item)
         {
-            var list = new List<string>();
+            var list = new List<JToken>();
             if (item is JArray array)
             {
-                list = array.Select(u => u.ToString()).ToList();
+                list = array.ToList();
             }
             else
             {
-                list.Add(item.ToString());
+                list.Add(item);
             }
 
             return list;
