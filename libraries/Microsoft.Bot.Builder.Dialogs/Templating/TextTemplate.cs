@@ -38,7 +38,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                     turnContext,
                     template: Template,
                     data: data).ConfigureAwait(false);
-                return result.ToString();
+                return result.ToString().Trim();
             }
 
             return null;

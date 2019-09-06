@@ -63,7 +63,7 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
             else
             {
-                activity = BuildActivityFromText(lgOutput?.ToString());
+                activity = BuildActivityFromText(lgOutput?.ToString()?.Trim());
             }
 
             return activity;
