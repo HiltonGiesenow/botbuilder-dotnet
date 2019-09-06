@@ -145,7 +145,8 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
             data.text = "text content";
             var activity = await mg.Generate(context, "[eventActivity]", data: data) as Activity;
             Assert.AreEqual(ActivityTypes.Event, activity.Type);
-            Assert.AreEqual(1, activity.Attachments.Count);
+            Assert.AreEqual("text content", activity.Name, "card name should be set");
+            Assert.AreEqual("text content", activity.Value, "card value should be set");
         }
 
         private static string GetProjectFolder()

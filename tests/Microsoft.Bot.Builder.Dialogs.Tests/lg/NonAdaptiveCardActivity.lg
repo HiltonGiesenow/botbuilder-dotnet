@@ -46,8 +46,7 @@
 
 # eventActivity
 [Activity
-    Text = @{text}
-    Speak = @{text}
-    Attachments = {HerocardWithCardAction(text, text)}
+    Name = {text}
+    Value = {text}
     Type = event
 ]

@@ -100,7 +100,7 @@ namespace Microsoft.Bot.Builder.Dialogs
 
                 if (type == nameof(Activity))
                 {
-                    activity = BuildNormalActivity(lgJObj);
+                    activity = BuildActivity(lgJObj);
                 }
                 else
                 {
@@ -111,10 +111,27 @@ namespace Microsoft.Bot.Builder.Dialogs
             return activity;
         }
 
-        private IActivity BuildNormalActivity(JObject lgJObj)
+        private IActivity BuildActivity(JObject lgJObj)
         {
-            var activity = Activity.CreateMessageActivity();
+            IActivity activity;
+            if (lgJObj["type"]?.ToString() == ActivityTypes.Event)
+            {
+                activity = BuildEventActivity(lgJObj);
+            }
+            else
+            {
+                activity = BuildMessageActivity(lgJObj);
+            }
 
+            // TODO
+            // BuildGenericActivity(activity, lgJObj);
+
+            return activity;
+        }
+
+        private IEventActivity BuildEventActivity(JObject lgJObj)
+        {
+            var activity = Activity.CreateEventActivity();
             foreach (var item in lgJObj)
             {
                 var property = item.Key.Trim();
@@ -125,8 +142,34 @@ namespace Microsoft.Bot.Builder.Dialogs
                     case "$type":
                         break;
 
-                    case "type":
-                        activity.Type = value.ToString();
+                    case "name":
+                        activity.Name = value.ToString();
+                        break;
+
+                    case "value":
+                        activity.Value = value.ToString();
+                        break;
+
+                    default:
+                        Debug.WriteLine(string.Format("Skipping unknown activity property {0}", property));
+                        break;
+                }
+            }
+
+            return activity;
+        }
+
+        private IMessageActivity BuildMessageActivity(JObject lgJObj)
+        {
+            var activity = Activity.CreateMessageActivity();
+            foreach (var item in lgJObj)
+            {
+                var property = item.Key.Trim();
+                var value = item.Value;
+
+                switch (property.ToLower())
+                {
+                    case "$type":
                         break;
 
                     case "text":
@@ -143,6 +186,10 @@ namespace Microsoft.Bot.Builder.Dialogs
 
                     case "attachments":
                         activity.Attachments = GetAttachments(value);
+                        break;
+
+                    case "value":
+                        activity.Value = value;
                         break;
 
                     case "suggestedactions":
