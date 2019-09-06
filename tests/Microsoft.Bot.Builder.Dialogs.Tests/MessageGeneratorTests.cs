@@ -33,8 +33,8 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
         public async Task TestInline()
         {
             var context = GetTurnContext(new MockLanguageGenerator());
-            var mg = new MessageActivityGenerator();
-            var activity = await mg.Generate(context, "text", data: null);
+            var mg = new ActivityGenerator();
+            var activity = await mg.Generate(context, "text", data: null) as Activity;
             Assert.AreEqual(ActivityTypes.Message, activity.Type);
             Assert.AreEqual("text", activity.Text);
             Assert.AreEqual("text", activity.Speak);
@@ -44,10 +44,10 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
         public async Task TestHerocard()
         {
             var context = await GetTurnContext("NonAdaptiveCardActivity.lg");
-            var mg = new MessageActivityGenerator();
+            var mg = new ActivityGenerator();
             dynamic data = new JObject();
             data.type = "herocard";
-            IMessageActivity activity = await mg.Generate(context, "[HeroCardTemplate]", data: data);
+            IMessageActivity activity = await mg.Generate(context, "[HeroCardTemplate]", data: data) as Activity;
             Assert.AreEqual(ActivityTypes.Message, activity.Type);
             Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
             Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
@@ -73,10 +73,10 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
         public async Task TestThmbnailCard()
         {
             var context = await GetTurnContext("NonAdaptiveCardActivity.lg");
-            var mg = new MessageActivityGenerator();
+            var mg = new ActivityGenerator();
             dynamic data = new JObject();
             data.type = "thumbnailcard";
-            IMessageActivity activity = await mg.Generate(context, "[ThumbnailCardTemplate]", data: data);
+            IMessageActivity activity = await mg.Generate(context, "[ThumbnailCardTemplate]", data: data) as Activity;
             Assert.AreEqual(ActivityTypes.Message, activity.Type);
             Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
             Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
@@ -100,11 +100,11 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
         public async Task TestCardAction()
         {
             var context = await GetTurnContext("NonAdaptiveCardActivity.lg");
-            var mg = new MessageActivityGenerator();
+            var mg = new ActivityGenerator();
             dynamic data = new JObject();
             data.title = "titleContent";
             data.text = "textContent";
-            IMessageActivity activity = await mg.Generate(context, "[HerocardWithCardAction]", data: data);
+            IMessageActivity activity = await mg.Generate(context, "[HerocardWithCardAction]", data: data) as Activity;
             Assert.AreEqual(ActivityTypes.Message, activity.Type);
             Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
             Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
@@ -124,16 +124,28 @@ namespace Microsoft.Bot.Builder.Dialogs.Tests
         public async Task TestAdaptiveCard()
         {
             var context = await GetTurnContext("AdaptiveCardActivity.lg");
-            var mg = new MessageActivityGenerator();
+            var mg = new ActivityGenerator();
             dynamic data = new JObject();
             data.adaptiveCardTitle = "test";
-            IMessageActivity activity = await mg.Generate(context, "[prompt]", data: data);
+            IMessageActivity activity = await mg.Generate(context, "[prompt]", data: data) as Activity;
             Assert.AreEqual(ActivityTypes.Message, activity.Type);
             Assert.IsTrue(string.IsNullOrEmpty(activity.Text));
             Assert.IsTrue(string.IsNullOrEmpty(activity.Speak));
             Assert.AreEqual(1, activity.Attachments.Count);
             Assert.AreEqual("application/vnd.microsoft.card.adaptive", activity.Attachments[0].ContentType);
             Assert.AreEqual("test", (string)((dynamic)activity.Attachments[0].Content).body[0].text);
+        }
+
+        [TestMethod]
+        public async Task TestEventActivity()
+        {
+            var context = await GetTurnContext("NonAdaptiveCardActivity.lg");
+            var mg = new ActivityGenerator();
+            dynamic data = new JObject();
+            data.text = "text content";
+            var activity = await mg.Generate(context, "[eventActivity]", data: data) as Activity;
+            Assert.AreEqual(ActivityTypes.Event, activity.Type);
+            Assert.AreEqual(1, activity.Attachments.Count);
         }
 
         private static string GetProjectFolder()

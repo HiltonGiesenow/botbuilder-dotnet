@@ -21,8 +21,8 @@ namespace Microsoft.Bot.Builder.Dialogs
         public static BotAdapter UseLanguageGeneration(
             this BotAdapter botAdapter, 
             ResourceExplorer resourceExplorer, 
-            string defaultLg = null, 
-            IMessageActivityGenerator messageGenerator = null)
+            string defaultLg = null,
+            IActivityGenerator messageGenerator = null)
         {
             if (defaultLg == null)
             {
@@ -50,7 +50,7 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// <param name="languageGenerator">LanguageGenerator to use.</param>
         /// <param name="messageGenerator">(OPTIONAL) Default is MessageActivityGenerator(). </param>
         /// <returns>botAdapter.</returns>
-        public static BotAdapter UseLanguageGeneration(this BotAdapter botAdapter, ResourceExplorer resourceExplorer, ILanguageGenerator languageGenerator, IMessageActivityGenerator messageGenerator = null)
+        public static BotAdapter UseLanguageGeneration(this BotAdapter botAdapter, ResourceExplorer resourceExplorer, ILanguageGenerator languageGenerator, IActivityGenerator messageGenerator = null)
         {
             TypeFactory.Register("DefaultLanguageGenerator", typeof(ResourceMultiLanguageGenerator), new CustomLGLoader());
             botAdapter.Use(new RegisterClassMiddleware<LanguageGeneratorManager>(new LanguageGeneratorManager(resourceExplorer ?? throw new ArgumentNullException(nameof(resourceExplorer)))));
@@ -65,9 +65,9 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// <param name="botAdapter">botAdapter to add services to.</param>
         /// <param name="messageGenerator">(OPTIONAL) Default is MessageActivityGenerator(). </param>
         /// <returns>botAdapter.</returns>
-        public static BotAdapter UseMessageActivityGeneration(this BotAdapter botAdapter, IMessageActivityGenerator messageGenerator = null)
+        public static BotAdapter UseMessageActivityGeneration(this BotAdapter botAdapter, IActivityGenerator messageGenerator = null)
         {
-            botAdapter.Use(new RegisterClassMiddleware<IMessageActivityGenerator>(messageGenerator ?? new MessageActivityGenerator()));
+            botAdapter.Use(new RegisterClassMiddleware<IActivityGenerator>(messageGenerator ?? new ActivityGenerator()));
             return botAdapter;
         }
 

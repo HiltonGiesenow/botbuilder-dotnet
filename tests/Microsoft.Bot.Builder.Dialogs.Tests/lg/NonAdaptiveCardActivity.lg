@@ -30,7 +30,7 @@
         Media=http://oi42.tinypic.com/1rchlx.jpg
 ]
 
-# HerocardWithCardAction
+# HerocardWithCardAction(title, text)
 [HeroCard
     Title = @{title}
     Text = @{text}
@@ -42,4 +42,12 @@
     Type = {if(type == null, 'imBack', type)}
     Title = {title}
     Value = {value}
+]
+
+# eventActivity
+[Activity
+    Text = @{text}
+    Speak = @{text}
+    Attachments = {HerocardWithCardAction(text, text)}
+    Type = event
 ]

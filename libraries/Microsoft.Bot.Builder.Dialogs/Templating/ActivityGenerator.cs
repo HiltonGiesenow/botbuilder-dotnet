@@ -11,14 +11,13 @@ using Newtonsoft.Json.Linq;
 namespace Microsoft.Bot.Builder.Dialogs
 {
     /// <summary>
-    /// The TextMessageGenerator implements IMessageActivityGenerator by using ILanguageGenerator
+    /// The ActivityGenerator implements IActivityGenerator by using ILanguageGenerator
     /// to generate text and then uses simple markdown semantics like chatdown to create complex
     /// attachments such as herocards, image cards, image attachments etc.
     /// </summary>
-    public class MessageActivityGenerator : IMessageActivityGenerator
+    public class ActivityGenerator : IActivityGenerator
     {
-        // Fixed text constructor
-        public MessageActivityGenerator()
+        public ActivityGenerator()
         {
         }
 
@@ -28,8 +27,8 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// <param name="turnContext">turn context.</param>
         /// <param name="template">(optional) inline template definition.</param>
         /// <param name="data">data to bind the template to.</param>
-        /// <returns>message activity.</returns>
-        public async Task<IMessageActivity> Generate(ITurnContext turnContext, string template, object data)
+        /// <returns>activity.</returns>
+        public async Task<IActivity> Generate(ITurnContext turnContext, string template, object data)
         {
             object lgOriginResult = template;
             var languageGenerator = turnContext.TurnState.Get<ILanguageGenerator>();
@@ -44,7 +43,7 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
 
             // render activity from template
-            return await CreateActivity(lgOriginResult).ConfigureAwait(false);
+            return await GenerateActivity(lgOriginResult).ConfigureAwait(false);
         }
 
         /// <summary>
@@ -55,16 +54,19 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// </remarks>
         /// <param name="lgOutput">lg output.</param>
         /// <returns>MessageActivity for it.</returns>
-        public async Task<IMessageActivity> CreateActivity(object lgOutput)
+        public async Task<IActivity> GenerateActivity(object lgOutput)
         {
-            var activity = Activity.CreateMessageActivity();
-            activity.TextFormat = TextFormatTypes.Markdown;
+            IActivity activity;
             if (lgOutput is JObject lgJObj)
             {
-                return CreateActivityFromJObj(lgJObj);
+                activity = BuildActivityFromObject(lgJObj);
+            }
+            else
+            {
+                activity = BuildActivityFromText(lgOutput?.ToString());
             }
 
-            return CreateActivityFromText(lgOutput.ToString());
+            return activity;
         }
 
         /// <summary>
@@ -73,13 +75,9 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// This method will create an MessageActivity from text.
         /// <param name="text">lg text output.</param>
         /// <returns>activity with text.</returns>
-        private IMessageActivity CreateActivityFromText(string text)
+        private IActivity BuildActivityFromText(string text)
         {
-            var activity = Activity.CreateMessageActivity();
-            activity.Text = text.Trim();
-            activity.Speak = text.Trim();
-
-            return activity;
+            return MessageFactory.Text(text, text);
         }
 
         /// <summary>
@@ -87,15 +85,14 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// </summary>
         /// This method will create an MessageActivity from JToken
         /// <param name="lgJObj">lg output.</param>
-        /// <returns>MessageActivity for it.</returns>
-        private IMessageActivity CreateActivityFromJObj(JObject lgJObj)
+        /// <returns>Activity for it.</returns>
+        private IActivity BuildActivityFromObject(JObject lgJObj)
         {
-            var activity = Activity.CreateMessageActivity();
-            activity.TextFormat = TextFormatTypes.Markdown;
+            IActivity activity;
 
             if (GetAttachment(lgJObj, out var attachment))
             {
-                activity.Attachments.Add(attachment);
+                activity = MessageFactory.Attachment(attachment);
             }
             else
             {
@@ -103,19 +100,21 @@ namespace Microsoft.Bot.Builder.Dialogs
 
                 if (type == nameof(Activity))
                 {
-                    BuildNormalActivity(activity, lgJObj);
+                    activity = BuildNormalActivity(lgJObj);
                 }
                 else
                 {
-                    activity = CreateActivityFromText(lgJObj.ToString());
+                    activity = BuildActivityFromText(lgJObj.ToString());
                 }
             }
 
             return activity;
         }
 
-        private void BuildNormalActivity(IMessageActivity activity, JObject lgJObj)
+        private IActivity BuildNormalActivity(JObject lgJObj)
         {
+            var activity = Activity.CreateMessageActivity();
+
             foreach (var item in lgJObj)
             {
                 var property = item.Key.Trim();
@@ -124,6 +123,10 @@ namespace Microsoft.Bot.Builder.Dialogs
                 switch (property.ToLower())
                 {
                     case "$type":
+                        break;
+
+                    case "type":
+                        activity.Type = value.ToString();
                         break;
 
                     case "text":
@@ -155,6 +158,8 @@ namespace Microsoft.Bot.Builder.Dialogs
                         break;
                 }
             }
+
+            return activity;
         }
 
         private SuggestedActions GetSuggestions(JToken value)

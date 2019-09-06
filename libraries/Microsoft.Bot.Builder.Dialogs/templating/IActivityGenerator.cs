@@ -10,8 +10,7 @@ namespace Microsoft.Bot.Builder.Dialogs
     /// Defines how to generate an IActivity based on all of the parameters which drive resolution.
     /// </summary>
     /// <typeparam name="T">type of IActivity to return. </typeparam>
-    public interface IActivityGenerator<T>
-        where T : IActivity
+    public interface IActivityGenerator
     {
         /// <summary>
         /// Generate a IActivity based on paramters.
@@ -20,6 +19,6 @@ namespace Microsoft.Bot.Builder.Dialogs
         /// <param name="template">template or [templateId].</param>
         /// <param name="data">data to bind to.</param>
         /// <returns>A <see cref="Task{TResult}"/> representing the asynchronous operation.</returns>
-        Task<T> Generate(ITurnContext turnContext, string template, object data);
+        Task<IActivity> Generate(ITurnContext turnContext, string template, object data);
     }
 }

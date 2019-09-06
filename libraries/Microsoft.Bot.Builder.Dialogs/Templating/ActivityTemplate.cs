@@ -30,10 +30,10 @@ namespace Microsoft.Bot.Builder.Dialogs
             if (!string.IsNullOrEmpty(this.Template))
             {
                 // if there is a message generator use that
-                IMessageActivityGenerator messageGenerator = context.TurnState.Get<IMessageActivityGenerator>();
-                if (messageGenerator != null)
+                var activityGenerator = context.TurnState.Get<IActivityGenerator>();
+                if (activityGenerator != null)
                 {
-                    var result = await messageGenerator.Generate(
+                    var result = await activityGenerator.Generate(
                         turnContext: context,
                         template: this.Template,
                         data: data).ConfigureAwait(false);
