@@ -67,6 +67,12 @@ namespace Microsoft.Bot.Builder.Dialogs
             return CreateActivityFromText(lgOutput.ToString());
         }
 
+        /// <summary>
+        /// Given a lg result, create an text activity.
+        /// </summary>
+        /// This method will create an MessageActivity from text.
+        /// <param name="text">lg text output.</param>
+        /// <returns>activity with text.</returns>
         private IMessageActivity CreateActivityFromText(string text)
         {
             var activity = Activity.CreateMessageActivity();
@@ -76,6 +82,12 @@ namespace Microsoft.Bot.Builder.Dialogs
             return activity;
         }
 
+        /// <summary>
+        /// Given a structured lg result, create an activity.
+        /// </summary>
+        /// This method will create an MessageActivity from JToken
+        /// <param name="lgJObj">lg output.</param>
+        /// <returns>MessageActivity for it.</returns>
         private IMessageActivity CreateActivityFromJObj(JObject lgJObj)
         {
             var activity = Activity.CreateMessageActivity();
@@ -106,11 +118,14 @@ namespace Microsoft.Bot.Builder.Dialogs
         {
             foreach (var item in lgJObj)
             {
-                var property = item.Key.Trim().ToLower();
+                var property = item.Key.Trim();
                 var value = item.Value;
 
                 switch (property.ToLower())
                 {
+                    case "$type":
+                        break;
+
                     case "text":
                         activity.Text = value.ToString();
                         break;
@@ -144,33 +159,33 @@ namespace Microsoft.Bot.Builder.Dialogs
 
         private SuggestedActions GetSuggestions(JToken value)
         {
-            var suggestions = new SuggestedActions()
+            var suggestionActions = new SuggestedActions()
             {
                 Actions = new List<CardAction>()
             };
 
-            var actions = FlattenValue(value);
+            var actions = NormalizedToList(value);
 
             foreach (var action in actions)
             {
                 if (action is JValue jValue && jValue.Type == JTokenType.String)
                 {
                     var actionStr = jValue.ToObject<string>().Trim();
-                    suggestions.Actions.Add(new CardAction(type: ActionTypes.MessageBack, title: actionStr, displayText: actionStr, text: actionStr));
+                    suggestionActions.Actions.Add(new CardAction(type: ActionTypes.MessageBack, title: actionStr, displayText: actionStr, text: actionStr));
                 }
                 else if (action is JObject actionJObj && GetCardAction(actionJObj, out var cardAction))
                 {
-                    suggestions.Actions.Add(cardAction);
+                    suggestionActions.Actions.Add(cardAction);
                 }
             }
 
-            return suggestions;
+            return suggestionActions;
         }
 
         private List<CardAction> GetButtons(JToken value)
         {
             var buttons = new List<CardAction>();
-            var actions = FlattenValue(value);
+            var actions = NormalizedToList(value);
 
             foreach (var action in actions)
             {
@@ -197,7 +212,7 @@ namespace Microsoft.Bot.Builder.Dialogs
             {
                 foreach (var item in cardActionJObj)
                 {
-                    var property = item.Key.Trim().ToLower();
+                    var property = item.Key.Trim();
                     var value = item.Value;
 
                     switch (property.ToLower())
@@ -260,11 +275,11 @@ namespace Microsoft.Bot.Builder.Dialogs
         private List<Attachment> GetAttachments(JToken value)
         {
             var attachments = new List<Attachment>();
-            var attachmentsJsonList = FlattenValue(value);
+            var attachmentsJsonList = NormalizedToList(value);
 
             foreach (var attachmentsJson in attachmentsJsonList)
             {
-                if (GetAttachment((JObject)attachmentsJson, out var attachment))
+                if (attachmentsJson is JObject attachmentsJsonJObj && GetAttachment(attachmentsJsonJObj, out var attachment))
                 {
                     attachments.Add(attachment);
                 }
@@ -340,7 +355,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                 var property = item.Key.Trim().ToLower();
                 var value = item.Value;
 
-                switch (property.ToLower())
+                switch (property)
                 {
                     case "title":
                     case "subtitle":
@@ -361,7 +376,7 @@ namespace Microsoft.Bot.Builder.Dialogs
                                 card["images"] = new JArray();
                             }
 
-                            var imageList = FlattenValue(value).Select(u => u.ToString()).ToList();
+                            var imageList = NormalizedToList(value).Select(u => u.ToString()).ToList();
                             imageList.ForEach(u => ((JArray)card["images"]).Add(new JObject() { { "url", u } }));
                         }
                         else
@@ -379,13 +394,18 @@ namespace Microsoft.Bot.Builder.Dialogs
                             card[property] = new JArray();
                         }
 
-                        var mediaList = FlattenValue(value).Select(u => u.ToString()).ToList();
+                        var mediaList = NormalizedToList(value).Select(u => u.ToString()).ToList();
 
                         mediaList.ForEach(u => ((JArray)card[property]).Add(new JObject() { { "url", u } }));
                         break;
 
                     case "buttons":
-                        card[property] = JArray.FromObject(GetButtons(value));
+                        if (card[property] == null)
+                        {
+                            card[property] = new JArray();
+                        }
+
+                        GetButtons(value).ForEach(u => ((JArray)card[property]).Add(JObject.FromObject(u)));
                         break;
 
                     case "autostart":
@@ -402,16 +422,19 @@ namespace Microsoft.Bot.Builder.Dialogs
             }
         }
 
-        private List<JToken> FlattenValue(JToken item)
+        private List<JToken> NormalizedToList(JToken item)
         {
             var list = new List<JToken>();
-            if (item is JArray array)
+            if (item != null)
             {
-                list = array.ToList();
-            }
-            else
-            {
-                list.Add(item);
+                if (item is JArray array)
+                {
+                    list = array.ToList();
+                }
+                else
+                {
+                    list.Add(item);
+                }
             }
 
             return list;
