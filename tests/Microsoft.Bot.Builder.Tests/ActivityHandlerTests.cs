@@ -4,20 +4,25 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Bot.Connector;
 using Microsoft.Bot.Connector.Authentication;
 using Microsoft.Bot.Schema;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Microsoft.Rest;
 using Moq;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Xunit;
 
 namespace Microsoft.Bot.Builder.Tests
 {
-    [TestClass]
     public class ActivityHandlerTests
     {
-        [TestMethod]
+        [Fact]
         public async Task TestMessageActivity()
         {
             // Arrange
@@ -29,11 +34,59 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(1, bot.Record.Count);
-            Assert.AreEqual("OnMessageActivityAsync", bot.Record[0]);
+            Assert.Single(bot.Record);
+            Assert.Equal("OnMessageActivityAsync", bot.Record[0]);
         }
 
-        [TestMethod]
+        [Fact]
+        public async Task TestEndOfConversationActivity()
+        {
+            // Arrange
+            var activity = new Activity { Type = ActivityTypes.EndOfConversation, Value = "some value" };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnEndOfConversationActivityAsync", bot.Record[0]);
+        }
+
+        [Fact]
+        public async Task TestTypingActivity()
+        {
+            // Arrange
+            var activity = new Activity { Type = ActivityTypes.Typing };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnTypingActivityAsync", bot.Record[0]);
+        }
+
+        [Fact]
+        public async Task TestInstallationUpdateActivity()
+        {
+            // Arrange
+            var activity = new Activity { Type = ActivityTypes.InstallationUpdate };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnInstallationUpdateActivityAsync", bot.Record[0]);
+        }
+
+        [Fact]
         public async Task TestMemberAdded1()
         {
             // Arrange
@@ -53,11 +106,11 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(1, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Single(bot.Record);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberAdded2()
         {
             // Arrange
@@ -78,12 +131,12 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnMembersAddedAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnMembersAddedAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberAdded3()
         {
             // Arrange
@@ -105,19 +158,19 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnMembersAddedAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnMembersAddedAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberRemoved1()
         {
             // Arrange
             var activity = new Activity
             {
                 Type = ActivityTypes.ConversationUpdate,
-                MembersAdded = new List<ChannelAccount>
+                MembersRemoved = new List<ChannelAccount>
                 {
                     new ChannelAccount { Id = "c" },
                 },
@@ -130,18 +183,18 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(1, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Single(bot.Record);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberRemoved2()
         {
             // Arrange
             var activity = new Activity
             {
                 Type = ActivityTypes.ConversationUpdate,
-                MembersAdded = new List<ChannelAccount>
+                MembersRemoved = new List<ChannelAccount>
                 {
                     new ChannelAccount { Id = "a" },
                     new ChannelAccount { Id = "c" },
@@ -155,19 +208,19 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnMembersAddedAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnMembersRemovedAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberRemoved3()
         {
             // Arrange
             var activity = new Activity
             {
                 Type = ActivityTypes.ConversationUpdate,
-                MembersAdded = new List<ChannelAccount>
+                MembersRemoved = new List<ChannelAccount>
                 {
                     new ChannelAccount { Id = "a" },
                     new ChannelAccount { Id = "b" },
@@ -182,12 +235,12 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnMembersAddedAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnMembersRemovedAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberAddedJustTheBot()
         {
             // Arrange
@@ -207,18 +260,18 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(1, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Single(bot.Record);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMemberRemovedJustTheBot()
         {
             // Arrange
             var activity = new Activity
             {
                 Type = ActivityTypes.ConversationUpdate,
-                MembersAdded = new List<ChannelAccount>
+                MembersRemoved = new List<ChannelAccount>
                 {
                     new ChannelAccount { Id = "c" },
                 },
@@ -231,11 +284,11 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(1, bot.Record.Count);
-            Assert.AreEqual("OnConversationUpdateActivityAsync", bot.Record[0]);
+            Assert.Single(bot.Record);
+            Assert.Equal("OnConversationUpdateActivityAsync", bot.Record[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestMessageReaction()
         {
             // Note the code supports multiple adds and removes in the same activity though
@@ -262,20 +315,20 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(3, bot.Record.Count);
-            Assert.AreEqual("OnMessageReactionActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnReactionsAddedAsync", bot.Record[1]);
-            Assert.AreEqual("OnReactionsRemovedAsync", bot.Record[2]);
+            Assert.Equal(3, bot.Record.Count);
+            Assert.Equal("OnMessageReactionActivityAsync", bot.Record[0]);
+            Assert.Equal("OnReactionsAddedAsync", bot.Record[1]);
+            Assert.Equal("OnReactionsRemovedAsync", bot.Record[2]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestTokenResponseEventAsync()
         {
             // Arrange
             var activity = new Activity
             {
                 Type = ActivityTypes.Event,
-                Name = "tokens/response",
+                Name = SignInConstants.TokenResponseEventName,
             };
             var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
 
@@ -284,12 +337,12 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnEventActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnTokenResponseEventAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnEventActivityAsync", bot.Record[0]);
+            Assert.Equal("OnTokenResponseEventAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestEventAsync()
         {
             // Arrange
@@ -305,12 +358,78 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnEventActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnEventAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnEventActivityAsync", bot.Record[0]);
+            Assert.Equal("OnEventAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
+        public async Task TestInvokeAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.Invoke,
+                Name = "some.random.invoke",
+            };
+
+            var adapter = new TestInvokeAdapter();
+            var turnContext = new TurnContext(adapter, activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnInvokeActivityAsync", bot.Record[0]);
+            Assert.Equal(200, ((InvokeResponse)((Activity)adapter.Activity).Value).Status);
+        }
+
+        [Fact]
+        public async Task TestSignInInvokeAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.Invoke,
+                Name = SignInConstants.VerifyStateOperationName,
+            };
+            var turnContext = new TurnContext(new TestInvokeAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnInvokeActivityAsync", bot.Record[0]);
+            Assert.Equal("OnSignInInvokeAsync", bot.Record[1]);
+        }
+
+        [Fact]
+        public async Task TestInvokeShouldNotMatchAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.Invoke,
+                Name = "should.not.match",
+            };
+            var adapter = new TestInvokeAdapter();
+            var turnContext = new TurnContext(adapter, activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnInvokeActivityAsync", bot.Record[0]);
+            Assert.Equal(501, ((InvokeResponse)((Activity)adapter.Activity).Value).Status);
+        }
+
+        [Fact]
         public async Task TestEventNullNameAsync()
         {
             // Arrange
@@ -325,12 +444,164 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(2, bot.Record.Count);
-            Assert.AreEqual("OnEventActivityAsync", bot.Record[0]);
-            Assert.AreEqual("OnEventAsync", bot.Record[1]);
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnEventActivityAsync", bot.Record[0]);
+            Assert.Equal("OnEventAsync", bot.Record[1]);
         }
 
-        [TestMethod]
+        [Fact]
+        public async Task TestInstallationUpdateAddAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.InstallationUpdate,
+                Action = "add"
+            };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnInstallationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnInstallationUpdateAddAsync", bot.Record[1]);
+        }
+
+        [Fact]
+        public async Task TestInstallationUpdateAddUpgradeAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.InstallationUpdate,
+                Action = "add-upgrade"
+            };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnInstallationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnInstallationUpdateAddAsync", bot.Record[1]);
+        }
+
+        [Fact]
+        public async Task TestInstallationUpdateRemoveAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.InstallationUpdate,
+                Action = "remove"
+            };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnInstallationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnInstallationUpdateRemoveAsync", bot.Record[1]);
+        }
+
+        [Fact]
+        public async Task TestInstallationUpdateRemoveUpgradeAsync()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.InstallationUpdate,
+                Action = "remove-upgrade"
+            };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnInstallationUpdateActivityAsync", bot.Record[0]);
+            Assert.Equal("OnInstallationUpdateRemoveAsync", bot.Record[1]);
+        }
+
+        [Fact]
+        public async Task TestOnAdaptiveCardInvokeAsync()
+        {
+            var value = JObject.FromObject(new AdaptiveCardInvokeValue { Action = new AdaptiveCardInvokeAction { Type = "Action.Execute" } });
+
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.Invoke,
+                Name = "adaptiveCard/action",
+                Value = value
+            };
+
+            var turnContext = new TurnContext(new TestInvokeAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Equal(2, bot.Record.Count);
+            Assert.Equal("OnInvokeActivityAsync", bot.Record[0]);
+            Assert.Equal("OnAdaptiveCardInvokeAsync", bot.Record[1]);
+        }
+
+        [Fact]
+        public async Task TestCommandActivityType()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.Command,
+                Name = "application/test",
+                Value = new CommandValue<object> { CommandId = "Test", Data = new { test = true } }
+            };
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnCommandActivityAsync", bot.Record[0]);
+        }
+
+        [Fact]
+        public async Task TestCommandResultActivityType()
+        {
+            // Arrange
+            var activity = new Activity
+            {
+                Type = ActivityTypes.CommandResult,
+                Name = "application/test",
+                Value = new CommandResultValue<object> { CommandId = "Test", Data = new { test = true } }
+            };
+
+            var turnContext = new TurnContext(new NotImplementedAdapter(), activity);
+
+            // Act
+            var bot = new TestActivityHandler();
+            await ((IBot)bot).OnTurnAsync(turnContext);
+
+            // Assert
+            Assert.Single(bot.Record);
+            Assert.Equal("OnCommandResultActivityAsync", bot.Record[0]);
+        }
+
+        [Fact]
         public async Task TestUnrecognizedActivityType()
         {
             // Arrange
@@ -345,11 +616,11 @@ namespace Microsoft.Bot.Builder.Tests
             await ((IBot)bot).OnTurnAsync(turnContext);
 
             // Assert
-            Assert.AreEqual(1, bot.Record.Count);
-            Assert.AreEqual("OnUnrecognizedActivityTypeAsync", bot.Record[0]);
+            Assert.Single(bot.Record);
+            Assert.Equal("OnUnrecognizedActivityTypeAsync", bot.Record[0]);
         }
 
-        [TestMethod]
+        [Fact]
         public async Task TestDelegatingTurnContext()
         {
             // Arrange
@@ -477,10 +748,75 @@ namespace Microsoft.Bot.Builder.Tests
                 return base.OnEventAsync(turnContext, cancellationToken);
             }
 
+            protected override Task OnEndOfConversationActivityAsync(ITurnContext<IEndOfConversationActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnEndOfConversationActivityAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task OnTypingActivityAsync(ITurnContext<ITypingActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnTypingActivityAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task OnInstallationUpdateActivityAsync(ITurnContext<IInstallationUpdateActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnInstallationUpdateActivityAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task OnCommandActivityAsync(ITurnContext<ICommandActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnCommandActivityAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task OnCommandResultActivityAsync(ITurnContext<ICommandResultActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnCommandResultActivityAsync(turnContext, cancellationToken);
+            }
+
             protected override Task OnUnrecognizedActivityTypeAsync(ITurnContext turnContext, CancellationToken cancellationToken)
             {
                 Record.Add(MethodBase.GetCurrentMethod().Name);
                 return base.OnUnrecognizedActivityTypeAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task<InvokeResponse> OnInvokeActivityAsync(ITurnContext<IInvokeActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                if (turnContext.Activity.Name == "some.random.invoke")
+                {
+                    return Task.FromResult(CreateInvokeResponse());
+                }
+
+                return base.OnInvokeActivityAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task OnSignInInvokeAsync(ITurnContext<IInvokeActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return Task.CompletedTask;
+            }
+
+            protected override Task OnInstallationUpdateAddAsync(ITurnContext<IInstallationUpdateActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnInstallationUpdateAddAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task OnInstallationUpdateRemoveAsync(ITurnContext<IInstallationUpdateActivity> turnContext, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return base.OnInstallationUpdateRemoveAsync(turnContext, cancellationToken);
+            }
+
+            protected override Task<AdaptiveCardInvokeResponse> OnAdaptiveCardInvokeAsync(ITurnContext<IInvokeActivity> turnContext, AdaptiveCardInvokeValue invokeValue, CancellationToken cancellationToken)
+            {
+                Record.Add(MethodBase.GetCurrentMethod().Name);
+                return Task.FromResult(new AdaptiveCardInvokeResponse());
             }
         }
 
@@ -500,6 +836,42 @@ namespace Microsoft.Bot.Builder.Tests
                 await turnContext.SendActivityAsync(new Activity());
                 await turnContext.SendActivitiesAsync(new IActivity[] { new Activity() });
                 await turnContext.UpdateActivityAsync(new Activity());
+            }
+        }
+
+        private class MockConnectorClient : IConnectorClient
+        {
+            private Uri _baseUri = new Uri("http://tempuri.org/whatever");
+
+            public Uri BaseUri
+            {
+                get { return _baseUri; }
+                set { _baseUri = value; }
+            }
+
+            public JsonSerializerSettings SerializationSettings => throw new NotImplementedException();
+
+            public JsonSerializerSettings DeserializationSettings => throw new NotImplementedException();
+
+            public ServiceClientCredentials Credentials { get => new MockCredentials(); }
+
+            public IAttachments Attachments => throw new NotImplementedException();
+
+            public IConversations Conversations => throw new NotImplementedException();
+
+            public void Dispose()
+            {
+                throw new NotImplementedException();
+            }
+
+            private class MockCredentials : ServiceClientCredentials
+            {
+                public override Task ProcessHttpRequestAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+                {
+                    request.Headers.Authorization = new AuthenticationHeaderValue("awesome");
+                    request.Headers.UserAgent.Add(new ProductInfoHeaderValue("Windows", "3.1"));
+                    return Task.CompletedTask;
+                }
             }
         }
     }

@@ -4,9 +4,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Bot.Schema;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Bot.Builder
 {
@@ -45,7 +47,7 @@ namespace Microsoft.Bot.Builder
         /// <seealso cref="OnUnrecognizedActivityTypeAsync(ITurnContext, CancellationToken)"/>
         /// <seealso cref="Activity.Type"/>
         /// <seealso cref="ActivityTypes"/>
-        public virtual Task OnTurnAsync(ITurnContext turnContext, CancellationToken cancellationToken = default(CancellationToken))
+        public virtual async Task OnTurnAsync(ITurnContext turnContext, CancellationToken cancellationToken = default(CancellationToken))
         {
             if (turnContext == null)
             {
@@ -65,20 +67,66 @@ namespace Microsoft.Bot.Builder
             switch (turnContext.Activity.Type)
             {
                 case ActivityTypes.Message:
-                    return OnMessageActivityAsync(new DelegatingTurnContext<IMessageActivity>(turnContext), cancellationToken);
+                    await OnMessageActivityAsync(new DelegatingTurnContext<IMessageActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
 
                 case ActivityTypes.ConversationUpdate:
-                    return OnConversationUpdateActivityAsync(new DelegatingTurnContext<IConversationUpdateActivity>(turnContext), cancellationToken);
+                    await OnConversationUpdateActivityAsync(new DelegatingTurnContext<IConversationUpdateActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
 
                 case ActivityTypes.MessageReaction:
-                    return OnMessageReactionActivityAsync(new DelegatingTurnContext<IMessageReactionActivity>(turnContext), cancellationToken);
+                    await OnMessageReactionActivityAsync(new DelegatingTurnContext<IMessageReactionActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
 
                 case ActivityTypes.Event:
-                    return OnEventActivityAsync(new DelegatingTurnContext<IEventActivity>(turnContext), cancellationToken);
+                    await OnEventActivityAsync(new DelegatingTurnContext<IEventActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case ActivityTypes.Invoke:
+                    var invokeResponse = await OnInvokeActivityAsync(new DelegatingTurnContext<IInvokeActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+
+                    // If OnInvokeActivityAsync has already sent an InvokeResponse, do not send another one.
+                    if (invokeResponse != null && turnContext.TurnState.Get<Activity>(BotFrameworkAdapter.InvokeResponseKey) == null)
+                    {
+                        await turnContext.SendActivityAsync(new Activity { Value = invokeResponse, Type = ActivityTypesEx.InvokeResponse }, cancellationToken).ConfigureAwait(false);
+                    }
+
+                    break;
+
+                case ActivityTypes.EndOfConversation:
+                    await OnEndOfConversationActivityAsync(new DelegatingTurnContext<IEndOfConversationActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case ActivityTypes.Typing:
+                    await OnTypingActivityAsync(new DelegatingTurnContext<ITypingActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case ActivityTypes.InstallationUpdate:
+                    await OnInstallationUpdateActivityAsync(new DelegatingTurnContext<IInstallationUpdateActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case ActivityTypes.Command:
+                    await OnCommandActivityAsync(new DelegatingTurnContext<ICommandActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
+
+                case ActivityTypes.CommandResult:
+                    await OnCommandResultActivityAsync(new DelegatingTurnContext<ICommandResultActivity>(turnContext), cancellationToken).ConfigureAwait(false);
+                    break;
 
                 default:
-                    return OnUnrecognizedActivityTypeAsync(turnContext, cancellationToken);
+                    await OnUnrecognizedActivityTypeAsync(turnContext, cancellationToken).ConfigureAwait(false);
+                    break;
             }
+        }
+
+        /// <summary>
+        /// An <see cref="InvokeResponse"/> factory that initializes the body to the parameter passed and status equal to OK.
+        /// </summary>
+        /// <param name="body">JSON serialized content from a POST response.</param>
+        /// <returns>A new <see cref="InvokeResponse"/> object.</returns>
+        protected static InvokeResponse CreateInvokeResponse(object body = null)
+        {
+            return new InvokeResponse { Status = (int)HttpStatusCode.OK, Body = body };
         }
 
         /// <summary>
@@ -322,7 +370,7 @@ namespace Microsoft.Bot.Builder
         /// <seealso cref="OnEventAsync(ITurnContext{IEventActivity}, CancellationToken)"/>
         protected virtual Task OnEventActivityAsync(ITurnContext<IEventActivity> turnContext, CancellationToken cancellationToken)
         {
-            if (turnContext.Activity.Name == "tokens/response")
+            if (turnContext.Activity.Name == SignInConstants.TokenResponseEventName)
             {
                 return OnTokenResponseEventAsync(turnContext, cancellationToken);
             }
@@ -378,6 +426,259 @@ namespace Microsoft.Bot.Builder
         }
 
         /// <summary>
+        /// Invoked when an invoke activity is received from the connector when the base behavior of
+        /// <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/> is used.
+        /// Invoke activities can be used to communicate many different things.
+        /// By default, this method will call <see cref="OnSignInInvokeAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/> if the
+        /// activity's name is <c>signin/verifyState</c> or <c>signin/tokenExchange</c>.
+        /// A <c>signin/verifyState</c> or <c>signin/tokenExchange</c> invoke can be triggered by an <see cref="OAuthCard"/>.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives an invoke activity, it calls this method.
+        /// If the event <see cref="IInvokeActivity.Name"/> is `signin/verifyState` or `signin/tokenExchange`, it calls
+        /// <see cref="OnSignInInvokeAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/>
+        /// Invoke activities communicate programmatic commands from a client or channel to a bot.
+        /// The meaning of an invoke activity is defined by the <see cref="IInvokeActivity.Name"/> property,
+        /// which is meaningful within the scope of a channel.
+        /// A `signin/verifyState` or `signin/tokenExchange` invoke can be triggered by an <see cref="OAuthCard"/> or an OAuth prompt.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        protected virtual async Task<InvokeResponse> OnInvokeActivityAsync(ITurnContext<IInvokeActivity> turnContext, CancellationToken cancellationToken)
+        {
+            try
+            {
+                switch (turnContext.Activity.Name)
+                {
+                    case "adaptiveCard/action":
+                        var invokeValue = GetAdaptiveCardInvokeValue(turnContext.Activity);
+                        return CreateInvokeResponse(await OnAdaptiveCardInvokeAsync(turnContext, invokeValue, cancellationToken).ConfigureAwait(false));
+
+                    case SignInConstants.VerifyStateOperationName:
+                    case SignInConstants.TokenExchangeOperationName:
+                        await OnSignInInvokeAsync(turnContext, cancellationToken).ConfigureAwait(false);
+                        return CreateInvokeResponse();
+
+                    default:
+                        throw new InvokeResponseException(HttpStatusCode.NotImplemented);
+                }
+            }
+            catch (InvokeResponseException e)
+            {
+                return e.CreateInvokeResponse();
+            }
+        }
+
+        /// <summary>
+        /// Invoked when a <c>signin/verifyState</c> or <c>signin/tokenExchange</c> event is received when the base behavior of
+        /// <see cref="OnInvokeActivityAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/> is used.
+        /// If using an <c>OAuthPrompt</c>, override this method to forward this <see cref="Activity"/> to the current dialog.
+        /// By default, this method does nothing.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnInvokeActivityAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/>
+        /// method receives an Invoke with a <see cref="IInvokeActivity.Name"/> of `tokens/response`,
+        /// it calls this method.
+        ///
+        /// If your bot uses the <c>OAuthPrompt</c>, forward the incoming <see cref="Activity"/> to
+        /// the current dialog.
+        /// </remarks>
+        /// <seealso cref="OnInvokeActivityAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/>
+        protected virtual Task OnSignInInvokeAsync(ITurnContext<IInvokeActivity> turnContext, CancellationToken cancellationToken)
+        {
+            throw new InvokeResponseException(HttpStatusCode.NotImplemented);
+        }
+
+        /// <summary>
+        /// Invoked when the bot is sent an Adaptive Card Action Execute.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="invokeValue">A stringly-typed object from the incoming activity's Value.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnInvokeActivityAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/>
+        /// method receives an Invoke with a <see cref="IInvokeActivity.Name"/> of `adaptiveCard/action`,
+        /// it calls this method.
+        /// </remarks>
+        /// <seealso cref="OnInvokeActivityAsync(ITurnContext{IInvokeActivity}, CancellationToken)"/>
+        protected virtual Task<AdaptiveCardInvokeResponse> OnAdaptiveCardInvokeAsync(ITurnContext<IInvokeActivity> turnContext, AdaptiveCardInvokeValue invokeValue, CancellationToken cancellationToken)
+        {
+            throw new InvokeResponseException(HttpStatusCode.NotImplemented);
+        }
+
+        /// <summary>
+        /// Override this in a derived class to provide logic specific to
+        /// <see cref="ActivityTypes.EndOfConversation"/> activities, such as the conversational logic.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a message activity, it calls this method.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        protected virtual Task OnEndOfConversationActivityAsync(ITurnContext<IEndOfConversationActivity> turnContext, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Override this in a derived class to provide logic specific to
+        /// <see cref="ActivityTypes.Typing"/> activities, such as the conversational logic.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a message activity, it calls this method.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        protected virtual Task OnTypingActivityAsync(ITurnContext<ITypingActivity> turnContext, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Override this in a derived class to provide logic specific to
+        /// <see cref="ActivityTypes.InstallationUpdate"/> activities.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a installation update activity, it calls this method.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        protected virtual Task OnInstallationUpdateActivityAsync(ITurnContext<IInstallationUpdateActivity> turnContext, CancellationToken cancellationToken)
+        {
+            switch (turnContext.Activity.Action)
+            {
+                case "add":
+                case "add-upgrade":
+                    return OnInstallationUpdateAddAsync(turnContext, cancellationToken);
+                case "remove":
+                case "remove-upgrade":
+                    return OnInstallationUpdateRemoveAsync(turnContext, cancellationToken);
+                default:
+                    return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// Override this in a derived class to provide logic specific to
+        /// <see cref="ActivityTypes.InstallationUpdate"/> activities with 'action' set to 'add'.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a installation update activity, it calls this method.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        protected virtual Task OnInstallationUpdateAddAsync(ITurnContext<IInstallationUpdateActivity> turnContext, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Override this in a derived class to provide logic specific to
+        /// <see cref="ActivityTypes.InstallationUpdate"/> activities with 'action' set to 'remove'.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a installation update activity, it calls this method.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        protected virtual Task OnInstallationUpdateRemoveAsync(ITurnContext<IInstallationUpdateActivity> turnContext, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Invoked when a command activity is received when the base behavior of
+        /// <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/> is used.
+        /// Commands are requests to perform an action and receivers typically respond with
+        /// one or more commandResult activities. Receivers are also expected to explicitly
+        /// reject unsupported command activities.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a command activity, it calls this method.
+        /// 
+        /// In a derived class, override this method to add logic that applies to all comand activities.
+        /// Add logic to apply before the specific command-handling logic before the call to the base class
+        /// <see cref="OnCommandActivityAsync(ITurnContext{ICommandActivity}, CancellationToken)"/> method.
+        /// Add logic to apply after the specific command-handling logic after the call to the base class
+        /// <see cref="OnCommandActivityAsync(ITurnContext{ICommandActivity}, CancellationToken)"/> method.
+        ///
+        /// Command activities communicate programmatic information from a client or channel to a bot.
+        /// The meaning of an command activity is defined by the <see cref="ICommandActivity.Name"/> property,
+        /// which is meaningful within the scope of a channel.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// <seealso cref="OnCommandActivityAsync(ITurnContext{ICommandActivity}, CancellationToken)"/>
+        protected virtual Task OnCommandActivityAsync(ITurnContext<ICommandActivity> turnContext, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Invoked when a CommandResult activity is received when the base behavior of
+        /// <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/> is used.
+        /// CommandResult activities can be used to communicate the result of a command execution.
+        /// </summary>
+        /// <param name="turnContext">A strongly-typed context object for this turn.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used by other objects
+        /// or threads to receive notice of cancellation.</param>
+        /// <returns>A task that represents the work queued to execute.</returns>
+        /// <remarks>
+        /// When the <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// method receives a CommandResult activity, it calls this method.
+        /// 
+        /// In a derived class, override this method to add logic that applies to all comand activities.
+        /// Add logic to apply before the specific CommandResult-handling logic before the call to the base class
+        /// <see cref="OnCommandResultActivityAsync(ITurnContext{ICommandResultActivity}, CancellationToken)"/> method.
+        /// Add logic to apply after the specific CommandResult-handling logic after the call to the base class
+        /// <see cref="OnCommandResultActivityAsync(ITurnContext{ICommandResultActivity}, CancellationToken)"/> method.
+        ///
+        /// CommandResult activities communicate programmatic information from a client or channel to a bot.
+        /// The meaning of an CommandResult activity is defined by the <see cref="ICommandResultActivity.Name"/> property,
+        /// which is meaningful within the scope of a channel.
+        /// </remarks>
+        /// <seealso cref="OnTurnAsync(ITurnContext, CancellationToken)"/>
+        /// <seealso cref="OnCommandResultActivityAsync(ITurnContext{ICommandResultActivity}, CancellationToken)"/>
+        protected virtual Task OnCommandResultActivityAsync(ITurnContext<ICommandResultActivity> turnContext, CancellationToken cancellationToken)
+        {
+            return Task.CompletedTask;
+        }
+
+        /// <summary>
         /// Invoked when an activity other than a message, conversation update, or event is received when the base behavior of
         /// <see cref="OnTurnAsync(ITurnContext, CancellationToken)"/> is used.
         /// If overridden, this could potentially respond to any of the other activity types like
@@ -403,6 +704,125 @@ namespace Microsoft.Bot.Builder
         protected virtual Task OnUnrecognizedActivityTypeAsync(ITurnContext turnContext, CancellationToken cancellationToken)
         {
             return Task.CompletedTask;
+        }
+
+        private AdaptiveCardInvokeValue GetAdaptiveCardInvokeValue(IInvokeActivity activity)
+        {
+            if (activity.Value == null)
+            {
+                var response = CreateAdaptiveCardInvokeErrorResponse(HttpStatusCode.BadRequest, "BadRequest", "Missing value property");
+                throw new InvokeResponseException(HttpStatusCode.BadRequest, response);
+            }
+
+            var obj = activity.Value as JObject;
+            if (obj == null)
+            {
+                var response = CreateAdaptiveCardInvokeErrorResponse(HttpStatusCode.BadRequest, "BadRequest", "Value property is not properly formed");
+                throw new InvokeResponseException(HttpStatusCode.BadRequest, response);
+            }
+
+            AdaptiveCardInvokeValue invokeValue = null;
+
+            try
+            {
+                invokeValue = obj.ToObject<AdaptiveCardInvokeValue>();
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch
+#pragma warning restore CA1031 // Do not catch general exception types
+            {
+                var response = CreateAdaptiveCardInvokeErrorResponse(HttpStatusCode.BadRequest, "BadRequest", "Value property is not properly formed");
+                throw new InvokeResponseException(HttpStatusCode.BadRequest, response);
+            }
+
+            if (invokeValue.Action == null)
+            {
+                var response = CreateAdaptiveCardInvokeErrorResponse(HttpStatusCode.BadRequest, "BadRequest", "Missing action property");
+                throw new InvokeResponseException(HttpStatusCode.BadRequest, response);
+            }
+
+            if (invokeValue.Action.Type != "Action.Execute")
+            {
+                var response = CreateAdaptiveCardInvokeErrorResponse(HttpStatusCode.BadRequest, "NotSupported", $"The action '{invokeValue.Action.Type}'is not supported.");
+                throw new InvokeResponseException(HttpStatusCode.BadRequest, response);
+            }
+
+            return invokeValue;
+        }
+
+        private AdaptiveCardInvokeResponse CreateAdaptiveCardInvokeErrorResponse(HttpStatusCode statusCode, string code, string message)
+        {
+            return new AdaptiveCardInvokeResponse()
+            {
+                StatusCode = (int)statusCode,
+                Type = "application/vnd.microsoft.error",
+                Value = new Error()
+                {
+                    Code = code,
+                    Message = message
+                }
+            };
+        }
+
+        /// <summary>
+        /// A custom exception for invoke response errors.
+        /// </summary>
+#pragma warning disable CA1064 // Exceptions should be public (we can't change this without breaking binary compat, we may consider making this type public in the future)
+        protected class InvokeResponseException : Exception
+#pragma warning restore CA1064 // Exceptions should be public
+        {
+            private readonly HttpStatusCode _statusCode;
+            private readonly object _body;
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="InvokeResponseException"/> class.
+            /// </summary>
+            /// <param name="statusCode">The Http status code of the error.</param>
+            /// <param name="body">The body of the exception. Default is null.</param>
+            public InvokeResponseException(HttpStatusCode statusCode, object body = null)
+            {
+                _statusCode = statusCode;
+                _body = body;
+            }
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="InvokeResponseException"/> class.
+            /// </summary>
+            public InvokeResponseException()
+            {
+            }
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="InvokeResponseException"/> class.
+            /// </summary>
+            /// <param name="message">The message that explains the reason for the exception, or an empty string.</param>
+            public InvokeResponseException(string message)
+                : base(message)
+            {
+            }
+
+            /// <summary>
+            /// Initializes a new instance of the <see cref="InvokeResponseException"/> class.
+            /// </summary>
+            /// <param name="message">The message that explains the reason for the exception, or an empty string.</param>
+            /// <param name="innerException">Gets the System.Exception instance that caused the current exception.</param>
+            public InvokeResponseException(string message, Exception innerException)
+                : base(message, innerException)
+            {
+            }
+
+            /// <summary>
+            /// A factory method that creates a new <see cref="InvokeResponse"/> object with the status code and body of the current object..
+            /// </summary>
+            /// <returns>A new <see cref="InvokeResponse"/> object.</returns>
+            public InvokeResponse CreateInvokeResponse()
+            {
+                return new InvokeResponse
+                {
+                    Status = (int)_statusCode,
+                    Body = _body
+                };
+            }
         }
     }
 }

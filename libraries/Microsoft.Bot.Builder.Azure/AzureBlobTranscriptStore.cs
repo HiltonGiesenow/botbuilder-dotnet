@@ -2,6 +2,7 @@
 // Licensed under the MIT License.
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -19,6 +20,7 @@ namespace Microsoft.Bot.Builder.Azure
     /// Each activity is stored as json blob in structure of
     /// container/{channelId]/{conversationId}/{Timestamp.ticks}-{activity.id}.json.
     /// </remarks>
+    [Obsolete("This class is deprecated. Please use BlobsTranscriptStore from Microsoft.Bot.Builder.Azure.Blobs instead.")]
     public class AzureBlobTranscriptStore : ITranscriptStore
     {
         private static readonly JsonSerializer _jsonSerializer = JsonSerializer.Create(new JsonSerializerSettings()
@@ -60,7 +62,7 @@ namespace Microsoft.Bot.Builder.Azure
             this.Container = new Lazy<CloudBlobContainer>(
                 () =>
             {
-                containerName = containerName.ToLower();
+                containerName = containerName.ToLowerInvariant();
                 var blobClient = storageAccount.CreateCloudBlobClient();
                 NameValidator.ValidateContainerName(containerName);
                 var container = blobClient.GetContainerReference(containerName);
@@ -85,21 +87,64 @@ namespace Microsoft.Bot.Builder.Azure
         {
             BotAssert.ActivityNotNull(activity);
 
-            var blobName = GetBlobName(activity);
-            var blobReference = this.Container.Value.GetBlockBlobReference(blobName);
-            blobReference.Properties.ContentType = "application/json";
-            blobReference.Metadata["FromId"] = activity.From.Id;
-            blobReference.Metadata["RecipientId"] = activity.Recipient.Id;
-            blobReference.Metadata["Timestamp"] = activity.Timestamp.Value.ToString("O");
-            using (var blobStream = await blobReference.OpenWriteAsync().ConfigureAwait(false))
+            switch (activity.Type)
             {
-                using (var jsonWriter = new JsonTextWriter(new StreamWriter(blobStream)))
-                {
-                    _jsonSerializer.Serialize(jsonWriter, activity);
-                }
-            }
+                case ActivityTypes.MessageUpdate:
+                    {
+                        var updatedActivity = JsonConvert.DeserializeObject<Activity>(JsonConvert.SerializeObject(activity));
+                        updatedActivity.Type = ActivityTypes.Message; // fixup original type (should be Message)
 
-            await blobReference.SetMetadataAsync().ConfigureAwait(false);
+                        var blob = await FindActivityBlobAsync(activity).ConfigureAwait(false);
+                        if (blob != null)
+                        {
+                            var originalActivity = JsonConvert.DeserializeObject<Activity>(await blob.DownloadTextAsync().ConfigureAwait(false));
+
+                            updatedActivity.LocalTimestamp = originalActivity.LocalTimestamp;
+                            updatedActivity.Timestamp = originalActivity.Timestamp;
+                            await LogActivityAsync(updatedActivity, blob).ConfigureAwait(false);
+                        }
+                        else
+                        {
+                            // The activity was not found, so just add a record of this update.
+                            await InnerLogActivityAsync(updatedActivity).ConfigureAwait(false);
+                        }
+
+                        return;
+                    }
+
+                case ActivityTypes.MessageDelete:
+                    {
+                        var blob = await FindActivityBlobAsync(activity).ConfigureAwait(false);
+                        if (blob != null)
+                        {
+                            var originalActivity = JsonConvert.DeserializeObject<Activity>(await blob.DownloadTextAsync().ConfigureAwait(false));
+
+                            // tombstone the original message
+                            var tombstonedActivity = new Activity()
+                            {
+                                Type = ActivityTypes.MessageDelete,
+                                Id = originalActivity.Id,
+                                From = new ChannelAccount(id: "deleted", role: originalActivity.From.Role),
+                                Recipient = new ChannelAccount(id: "deleted", role: originalActivity.Recipient.Role),
+                                Locale = originalActivity.Locale,
+                                LocalTimestamp = originalActivity.Timestamp,
+                                Timestamp = originalActivity.Timestamp,
+                                ChannelId = originalActivity.ChannelId,
+                                Conversation = originalActivity.Conversation,
+                                ServiceUrl = originalActivity.ServiceUrl,
+                                ReplyToId = originalActivity.ReplyToId,
+                            };
+
+                            await LogActivityAsync(tombstonedActivity, blob).ConfigureAwait(false);
+                        }
+
+                        return;
+                    }
+
+                default:
+                    await InnerLogActivityAsync(activity).ConfigureAwait(false);
+                    return;
+            }
         }
 
         /// <summary>
@@ -114,12 +159,12 @@ namespace Microsoft.Bot.Builder.Azure
         {
             if (string.IsNullOrEmpty(channelId))
             {
-                throw new ArgumentNullException($"missing {nameof(channelId)}");
+                throw new ArgumentNullException(nameof(channelId));
             }
 
             if (string.IsNullOrEmpty(conversationId))
             {
-                throw new ArgumentNullException($"missing {nameof(conversationId)}");
+                throw new ArgumentNullException(nameof(conversationId));
             }
 
             var pagedResult = new PagedResult<IActivity>();
@@ -135,7 +180,7 @@ namespace Microsoft.Bot.Builder.Azure
 
                 foreach (var blob in segment.Results.Cast<CloudBlockBlob>())
                 {
-                    if (DateTime.Parse(blob.Metadata["Timestamp"]).ToUniversalTime() >= startDate)
+                    if (DateTime.Parse(blob.Metadata["Timestamp"], CultureInfo.InvariantCulture).ToUniversalTime() >= startDate)
                     {
                         if (continuationToken != null)
                         {
@@ -156,10 +201,7 @@ namespace Microsoft.Bot.Builder.Azure
                     }
                 }
 
-                if (segment.ContinuationToken != null)
-                {
-                    token = segment.ContinuationToken;
-                }
+                token = segment.ContinuationToken;
             }
             while (token != null && blobs.Count < pageSize);
 
@@ -190,7 +232,7 @@ namespace Microsoft.Bot.Builder.Azure
         {
             if (string.IsNullOrEmpty(channelId))
             {
-                throw new ArgumentNullException($"missing {nameof(channelId)}");
+                throw new ArgumentNullException(nameof(channelId));
             }
 
             var dirName = GetDirName(channelId);
@@ -254,12 +296,12 @@ namespace Microsoft.Bot.Builder.Azure
         {
             if (string.IsNullOrEmpty(channelId))
             {
-                throw new ArgumentNullException($"{nameof(channelId)} should not be null");
+                throw new ArgumentNullException(nameof(channelId));
             }
 
             if (string.IsNullOrEmpty(conversationId))
             {
-                throw new ArgumentNullException($"{nameof(conversationId)} should not be null");
+                throw new ArgumentNullException(nameof(conversationId));
             }
 
             var dirName = GetDirName(channelId, conversationId);
@@ -274,17 +316,32 @@ namespace Microsoft.Bot.Builder.Azure
                     await blob.DeleteIfExistsAsync().ConfigureAwait(false);
                 }
 
-                if (segment.ContinuationToken != null)
-                {
-                    token = segment.ContinuationToken;
-                }
+                token = segment.ContinuationToken;
             }
             while (token != null);
         }
 
+        private static async Task LogActivityAsync(IActivity activity, CloudBlockBlob blobReference)
+        {
+            blobReference.Properties.ContentType = "application/json";
+            blobReference.Metadata["Id"] = activity.Id;
+            blobReference.Metadata["FromId"] = activity.From.Id;
+            blobReference.Metadata["RecipientId"] = activity.Recipient.Id;
+            blobReference.Metadata["Timestamp"] = activity.Timestamp.Value.ToString("O", CultureInfo.InvariantCulture);
+            using (var blobStream = await blobReference.OpenWriteAsync().ConfigureAwait(false))
+            {
+                using (var jsonWriter = new JsonTextWriter(new StreamWriter(blobStream)))
+                {
+                    _jsonSerializer.Serialize(jsonWriter, activity);
+                }
+            }
+
+            await blobReference.SetMetadataAsync().ConfigureAwait(false);
+        }
+
         private static string GetBlobName(IActivity activity)
         {
-            var blobName = $"{SanitizeKey(activity.ChannelId)}/{SanitizeKey(activity.Conversation.Id)}/{activity.Timestamp.Value.Ticks.ToString("x")}-{SanitizeKey(activity.Id)}.json";
+            var blobName = $"{SanitizeKey(activity.ChannelId)}/{SanitizeKey(activity.Conversation.Id)}/{activity.Timestamp.Value.Ticks.ToString("x", CultureInfo.InvariantCulture)}-{SanitizeKey(activity.Id)}.json";
             NameValidator.ValidateBlobName(blobName);
             return blobName;
         }
@@ -312,6 +369,53 @@ namespace Microsoft.Bot.Builder.Azure
         {
             // Blob Name rules: case-sensitive any url char
             return Uri.EscapeDataString(key);
+        }
+
+        private Task InnerLogActivityAsync(IActivity activity)
+        {
+            var blobName = GetBlobName(activity);
+            var blobReference = this.Container.Value.GetBlockBlobReference(blobName);
+            return LogActivityAsync(activity, blobReference);
+        }
+
+        private async Task<CloudBlockBlob> FindActivityBlobAsync(IActivity activity)
+        {
+            var dirName = GetDirName(activity.ChannelId, activity.Conversation.Id);
+            var dir = this.Container.Value.GetDirectoryReference(dirName);
+            BlobContinuationToken token = null;
+            do
+            {
+                var segment = await dir.ListBlobsSegmentedAsync(false, BlobListingDetails.Metadata, 50, token, null, null).ConfigureAwait(false);
+                foreach (var blob in segment.Results.Cast<CloudBlockBlob>())
+                {
+                    blob.Metadata.TryGetValue("Id", out string id);
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        if (id == activity.Id)
+                        {
+                            return blob;
+                        }
+                    }
+                    else
+                    {
+                        // we have to read full activity as it's an old blob
+                        var entry = JsonConvert.DeserializeObject<Activity>(await blob.DownloadTextAsync().ConfigureAwait(false));
+                        blob.Metadata["Id"] = entry.Id;
+
+                        // update metadata with Id so we don't have to download again.  This effectively "patches" old metadata records
+                        await blob.SetMetadataAsync().ConfigureAwait(false);
+                        if (entry.Id == activity.Id)
+                        {
+                            return blob;
+                        }
+                    }
+                }
+
+                token = segment.ContinuationToken;
+            }
+            while (token != null);
+
+            return null;
         }
     }
 }

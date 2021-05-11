@@ -6,8 +6,17 @@ namespace Microsoft.Bot.Connector
     /// <summary>
     /// Ids of channels supported by the Bot Builder.
     /// </summary>
+#pragma warning disable CA1052 // Static holder types should be Static or NotInheritable (we can't change this without breaking binary compat)
+#pragma warning disable CA1724 // Type names should not match namespaces (we can't change this without breaking binary compat)
     public class Channels
+#pragma warning restore CA1724 // Type names should not match namespaces
+#pragma warning restore CA1052 // Static holder types should be Static or NotInheritable
     {
+        /// <summary>
+        /// Alexa channel.
+        /// </summary>
+        public const string Alexa = "alexa";
+
         /// <summary>
         /// Console channel.
         /// </summary>
@@ -22,6 +31,11 @@ namespace Microsoft.Bot.Connector
         /// Direct Line channel.
         /// </summary>
         public const string Directline = "directline";
+
+        /// <summary>
+        /// Direct Line Speech channel.
+        /// </summary>
+        public const string DirectlineSpeech = "directlinespeech";
 
         /// <summary>
         /// Email channel.
@@ -97,5 +111,10 @@ namespace Microsoft.Bot.Connector
         /// Twilio channel.
         /// </summary>
         public const string Twilio = "twilio-sms";
+
+        /// <summary>
+        /// Telephony channel.
+        /// </summary>
+        public const string Telephony = "telephony";
     }
 }
